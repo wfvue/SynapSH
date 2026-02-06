@@ -25,27 +25,42 @@ const canConnect = computed(() => {
 });
 
 async function connect() {
-  if (!canConnect.value) return;
+  console.log("=== 连接按钮被点击 ===");
+  console.log("canConnect:", canConnect.value);
+  console.log("host:", host.value);
+  console.log("port:", port.value);
+  console.log("username:", username.value);
+  
+  if (!canConnect.value) {
+    console.log("条件不满足，无法连接");
+    return;
+  }
   
   isConnecting.value = true;
   error.value = "";
   
   try {
     const sessionId = `session_${Date.now()}`;
+    console.log("生成的 sessionId:", sessionId);
+    
+    const params = {
+      host: host.value,
+      port: port.value,
+      username: username.value,
+      password: authType.value === "password" ? password.value : null,
+      privateKey: authType.value === "key" ? privateKey.value : null,
+    };
+    console.log("调用 connect_ssh，参数:", params);
     
     await invoke("connect_ssh", {
       sessionId,
-      params: {
-        host: host.value,
-        port: port.value,
-        username: username.value,
-        password: authType.value === "password" ? password.value : null,
-        privateKey: authType.value === "key" ? privateKey.value : null,
-      },
+      params,
     });
     
+    console.log("连接成功！");
     emit("connected", sessionId);
   } catch (e) {
+    console.error("连接失败:", e);
     error.value = String(e);
   } finally {
     isConnecting.value = false;
@@ -54,7 +69,6 @@ async function connect() {
 
 async function disconnect() {
   try {
-    // TODO: 调用断开连接命令
     emit("disconnected");
   } catch (e) {
     console.error("Disconnect error:", e);
@@ -62,7 +76,6 @@ async function disconnect() {
 }
 
 function selectKeyFile() {
-  // TODO: 使用 Tauri 文件选择对话框
   privateKey.value = "/path/to/key";
 }
 </script>

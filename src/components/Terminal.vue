@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -13,8 +14,19 @@ const props = defineProps<{
 const terminalRef = ref<HTMLElement>();
 const terminal = ref<XTerm | null>(null);
 const fitAddon = ref<FitAddon | null>(null);
+let unlistenFn: UnlistenFn | null = null;
 
-onMounted(() => {
+// base64 解码
+function base64Decode(base64: string): string {
+  try {
+    return atob(base64);
+  } catch (e) {
+    console.error("Base64 decode error:", e);
+    return "";
+  }
+}
+
+onMounted(async () => {
   if (!terminalRef.value) return;
 
   // 初始化 xterm.js
@@ -86,6 +98,18 @@ onMounted(() => {
     }
   });
 
+  // 监听 SSH 数据事件
+  const eventName = `ssh-data-${props.sessionId}`;
+  console.log("Listening for event:", eventName);
+  
+  unlistenFn = await listen<string>(eventName, (event) => {
+    console.log("Received SSH data, length:", event.payload.length);
+    const decoded = base64Decode(event.payload);
+    if (decoded && terminal.value) {
+      terminal.value.write(decoded);
+    }
+  });
+
   // 监听窗口大小变化
   const resizeObserver = new ResizeObserver(() => {
     fitAddon.value?.fit();
@@ -95,6 +119,9 @@ onMounted(() => {
   // 清理函数
   onUnmounted(() => {
     resizeObserver.disconnect();
+    if (unlistenFn) {
+      unlistenFn();
+    }
     terminal.value?.dispose();
   });
 });
@@ -102,10 +129,26 @@ onMounted(() => {
 // 监听 sessionId 变化
 watch(
   () => props.sessionId,
-  (newId, oldId) => {
+  async (newId, oldId) => {
     if (oldId && newId !== oldId) {
-      // 会话变化时清空终端
+      // 取消旧的事件监听
+      if (unlistenFn) {
+        unlistenFn();
+        unlistenFn = null;
+      }
+      // 清空终端
       terminal.value?.clear();
+      
+      // 监听新的事件
+      const eventName = `ssh-data-${newId}`;
+      console.log("Switching to new event:", eventName);
+      unlistenFn = await listen<string>(eventName, (event) => {
+        console.log("Received SSH data, length:", event.payload.length);
+        const decoded = base64Decode(event.payload);
+        if (decoded && terminal.value) {
+          terminal.value.write(decoded);
+        }
+      });
     }
   }
 );
