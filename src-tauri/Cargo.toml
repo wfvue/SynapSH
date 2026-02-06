@@ -1,0 +1,38 @@
+[package]
+name = "synapsh"
+version = "0.1.0"
+description = "光析 - 基于 Tauri 的现代化 SSH 客户端"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "synapsh_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+bytes = "1"
+async-trait = "0.1"
+
+# SSH 相关依赖
+russh = "0.50"
+russh-keys = "0.50"
+russh-sftp = "2"
+
+# 日志
+log = "0.4"
+env_logger = "0.11"
+
+# 其他工具
+dirs = "6"
+chrono = { version = "0.4", features = ["serde"] }
