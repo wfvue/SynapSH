@@ -128,24 +128,16 @@ function handleBackdropClick(e: MouseEvent) {
                                     <span class="detail-value">{{ process.pid }}</span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">父进程 ID</span>
-                                    <span class="detail-value">{{ process.ppid || '-' }}</span>
-                                </div>
-                                <div class="detail-item">
                                     <span class="detail-label">用户</span>
                                     <span class="detail-value">{{ process.user }}</span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">优先级 (Nice)</span>
-                                    <span class="detail-value">{{ process.nice }}</span>
+                                    <span class="detail-label">状态</span>
+                                    <span class="detail-value">{{ process.statusDesc }} ({{ process.status }})</span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">线程数</span>
-                                    <span class="detail-value">{{ process.threads }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">原始状态</span>
-                                    <span class="detail-value">{{ process.status }}</span>
+                                    <span class="detail-label">启动时间</span>
+                                    <span class="detail-value">{{ process.startTime }}</span>
                                 </div>
                             </div>
                         </div>
@@ -168,24 +160,6 @@ function handleBackdropClick(e: MouseEvent) {
                                 <div class="detail-item">
                                     <span class="detail-label">内存占比</span>
                                     <span class="detail-value">{{ process.memory.toFixed(2) }}%</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 时间信息 -->
-                        <div class="detail-section">
-                            <h4 class="section-title">
-                                <span class="icon-[mdi--clock-outline]"></span>
-                                时间信息
-                            </h4>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <span class="detail-label">启动时间</span>
-                                    <span class="detail-value">{{ process.startTime }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">运行时长</span>
-                                    <span class="detail-value">{{ process.elapsedTime }}</span>
                                 </div>
                             </div>
                         </div>

@@ -5,18 +5,71 @@ use russh::keys::PublicKey;
 use russh::{ChannelId, Disconnect};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tauri::Emitter;
-use tokio::sync::{mpsc, Mutex};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{mpsc, watch, Mutex};
 
 mod db;
 use db::{Database, Machine, MachineInput};
 
 // SSH 会话管理
 pub struct SSHSession {
-    handle: Handle<SSHClient>,
+    handle: Arc<Mutex<Handle<SSHClient>>>,
     channel: russh::Channel<russh::client::Msg>,
+    shell_channel_id: Arc<Mutex<Option<ChannelId>>>,
+    socks_proxy: Option<SocksProxy>,
+}
+
+struct SocksProxy {
+    port: u16,
+    shutdown: watch::Sender<bool>,
+}
+
+impl SocksProxy {
+    async fn start(handle: Arc<Mutex<Handle<SSHClient>>>) -> Result<Self> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let port = listener.local_addr()?.port();
+        let (shutdown, mut shutdown_rx) = watch::channel(false);
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.changed() => {
+                        break;
+                    }
+                    accept = listener.accept() => {
+                        match accept {
+                            Ok((stream, originator)) => {
+                                let handle = handle.clone();
+                                tokio::spawn(async move {
+                                    if let Err(err) = handle_socks_client(stream, originator, handle).await {
+                                        log::warn!("SOCKS client error: {err}");
+                                    }
+                                });
+                            }
+                            Err(err) => {
+                                log::warn!("SOCKS accept error: {err}");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(Self { port, shutdown })
+    }
+}
+
+impl Drop for SocksProxy {
+    fn drop(&mut self) {
+        let _ = self.shutdown.send(true);
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -27,17 +80,14 @@ pub struct ProcessInfo {
     cpu: f64,
     memory: f64,
     user: String,
-    // 新增字段
+    // 进程状态
     status: String,       // 进程状态 (R/S/Z/D/T等)
     status_desc: String,  // 状态描述
     start_time: String,   // 启动时间
-    elapsed_time: String, // 运行时长
-    threads: u32,         // 线程数
-    rss: u64,            // 物理内存 (KB)
+    elapsed_time: String, // 运行时长 (TIME字段)
     vsz: u64,            // 虚拟内存 (KB)
+    rss: u64,            // 物理内存 (KB)
     command: String,      // 完整命令行
-    ppid: u32,           // 父进程ID
-    nice: i32,           // 优先级 (nice值)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -87,6 +137,12 @@ pub struct SystemStats {
     system: SystemInfo,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserLaunchOptions {
+    profile_mode: Option<String>,
+}
+
 impl SSHSession {
     // ... existing connect method ...
     pub async fn connect(
@@ -109,7 +165,8 @@ impl SSHSession {
         // 创建通道用于接收 SSH 数据
         // 注意：这里我们调大 channel buffer，防止高吞吐时阻塞
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(4096);
-        let client = SSHClient::new(tx);
+        let shell_channel_id = Arc::new(Mutex::new(None));
+        let client = SSHClient::new(tx, shell_channel_id.clone());
 
         info!("正在建立 TCP 连接...");
         let mut handle = russh::client::connect(config, (host, port), client).await?;
@@ -139,13 +196,14 @@ impl SSHSession {
 
         // 打开交互式 Shell 通道
         info!("打开 SSH Shell 通道...");
-        let mut channel = handle.channel_open_session().await?;
+        let channel = handle.channel_open_session().await?;
         channel
             .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
             .await?;
         channel.request_shell(false).await?;
 
         let channel_id = channel.id();
+        *shell_channel_id.lock().await = Some(channel_id);
         info!("通道已打开，ID: {:?}", channel_id);
 
         // 启动数据转发任务 - 将 SSH 数据发送到前端
@@ -162,7 +220,12 @@ impl SSHSession {
             info!("数据转发任务结束");
         });
 
-        Ok(SSHSession { handle, channel })
+        Ok(SSHSession {
+            handle: Arc::new(Mutex::new(handle)),
+            channel,
+            shell_channel_id,
+            socks_proxy: None,
+        })
     }
 
     pub async fn write(&self, data: &[u8]) -> Result<()> {
@@ -180,7 +243,8 @@ impl SSHSession {
     }
 
     pub async fn disconnect(self) -> Result<()> {
-        self.handle
+        let mut handle = self.handle.lock().await;
+        handle
             .disconnect(Disconnect::ByApplication, "", "")
             .await?;
         Ok(())
@@ -188,8 +252,12 @@ impl SSHSession {
 
     /// 执行一次性命令并返回输出
     pub async fn exec_command(&self, command: &str) -> Result<String> {
-        let mut channel = self.handle.channel_open_session().await?;
-        channel.exec(true, command).await?;
+        let mut channel = {
+            let mut handle = self.handle.lock().await;
+            let mut channel = handle.channel_open_session().await?;
+            channel.exec(true, command).await?;
+            channel
+        };
 
         let mut output = Vec::new();
         while let Some(msg) = channel.wait().await {
@@ -209,16 +277,42 @@ impl SSHSession {
 
         Ok(String::from_utf8_lossy(&output).to_string())
     }
+
+    pub async fn check_direct_tcpip(&self, host: &str, port: u16) -> Result<()> {
+        let mut handle = self.handle.lock().await;
+        let mut channel = handle
+            .channel_open_direct_tcpip(
+                host.to_string(),
+                port.into(),
+                "127.0.0.1".to_string(),
+                0u32,
+            )
+            .await?;
+        let _ = channel.close().await;
+        Ok(())
+    }
+
+    pub async fn ensure_socks_proxy(&mut self) -> Result<u16> {
+        if let Some(proxy) = &self.socks_proxy {
+            return Ok(proxy.port);
+        }
+
+        let proxy = SocksProxy::start(self.handle.clone()).await?;
+        let port = proxy.port;
+        self.socks_proxy = Some(proxy);
+        Ok(port)
+    }
 }
 // ... existing SSHClient struct ...
 // SSH 客户端处理器
 struct SSHClient {
     tx: mpsc::Sender<Vec<u8>>,
+    shell_channel_id: Arc<Mutex<Option<ChannelId>>>,
 }
 
 impl SSHClient {
-    fn new(tx: mpsc::Sender<Vec<u8>>) -> Self {
-        Self { tx }
+    fn new(tx: mpsc::Sender<Vec<u8>>, shell_channel_id: Arc<Mutex<Option<ChannelId>>>) -> Self {
+        Self { tx, shell_channel_id }
     }
 }
 
@@ -234,7 +328,7 @@ impl russh::client::Handler for SSHClient {
 
     fn data(
         &mut self,
-        _channel: ChannelId,
+        channel: ChannelId,
         data: &[u8],
         _session: &mut russh::client::Session,
     ) -> impl std::future::Future<Output = Result<()>> + Send {
@@ -280,52 +374,29 @@ impl russh::client::Handler for SSHClient {
 
         let data = data.to_vec();
         let tx = self.tx.clone();
+        let shell_channel_id = self.shell_channel_id.clone();
         async move {
-            // 这里我们应该只转发 Shell Channel 的数据。
-            // 但是在这里我们不知道哪个是 Shell Channel。
-            // 这是一个潜在 bug。
-            // 临时解决方案：
-            // 我们约定 Shell Channel 是第一个打开的 channel？
-            // 或者我们修改协议，让数据带上 channel id？
-            // 或者：ActivityMonitor 的命令输出通常是文本，而 Terminal 是 PTY 流。
-            //
-            // 更好方案：使用 Shared State 记录 Shell Channel ID。
-            // 但是 Client 是在 connect 时 move 进去的。
-            //
-            // 让我们先简单实现，看看 data 里的 ChannelId。
-            // 我们可以把 Shell Channel ID 存在一个全局 Map 里？或者通过某种方式传递给 Client。
-            //
-            // 实际上，exec_command 创建新 channel，执行完就关闭。
-            // 我们可以尝试在 Handler 中过滤。
-            //
-            // 为了修正这个问题，我需要引入一个机制来识别 Shell Channel。
-            // 可以使用 Arc<AtomicU32> 或者是类似的东西来存储 Shell Channel ID。
-            // 在 SSHSession::connect 里，当 Shell Channel 打开后，更新这个 ID。
-            // 但是 Handler 在 connect 内部就开始工作了。
-            // Shell Channel ID 是在 connect 之后才拿到的？不对，channel_open_session 返回 channel，此时才有 ID。
-            //
-            // 修改 Client 定义：
-            // struct SSHClient { tx: mpsc::Sender<Vec<u8>>, shell_channel_id: Arc<Mutex<Option<ChannelId>>> }
-            //
-            // 在 connect 后，把 channel.id() 写入 shell_channel_id。
-            // 在 Handler::data 里，检查 current channel_id 是否等于 *shell_channel_id。
-
-            let _ = tx.send(data).await;
+            if *shell_channel_id.lock().await == Some(channel) {
+                let _ = tx.send(data).await;
+            }
             Ok(())
         }
     }
 
     fn extended_data(
         &mut self,
-        _channel: ChannelId,
+        channel: ChannelId,
         _ext: u32,
         data: &[u8],
         _session: &mut russh::client::Session,
     ) -> impl std::future::Future<Output = Result<()>> + Send {
         let data = data.to_vec();
         let tx = self.tx.clone();
+        let shell_channel_id = self.shell_channel_id.clone();
         async move {
-            let _ = tx.send(data).await;
+            if *shell_channel_id.lock().await == Some(channel) {
+                let _ = tx.send(data).await;
+            }
             Ok(())
         }
     }
@@ -340,6 +411,175 @@ impl russh::client::Handler for SSHClient {
 fn base64_encode(data: &[u8]) -> String {
     use base64::{engine::general_purpose, Engine as _};
     general_purpose::STANDARD.encode(data)
+}
+
+fn normalize_url(input: &str) -> Result<tauri::Url, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("URL 不能为空".to_string());
+    }
+    let url = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{}", trimmed)
+    };
+    tauri::Url::parse(&url).map_err(|e| e.to_string())
+}
+
+fn browser_label(session_id: &str) -> String {
+    let mut label = String::from("browser-");
+    for ch in session_id.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '/' | ':' | '_') {
+            label.push(ch);
+        } else {
+            label.push('_');
+        }
+    }
+    label
+}
+
+fn chrome_profile_dir(session_id: &str, profile_mode: &str) -> Result<std::path::PathBuf, String> {
+    let base = std::env::temp_dir().join("synapsh-chrome").join(browser_label(session_id));
+    let dir = if profile_mode == "new" {
+        base.join(format!("profile-{}", uuid::Uuid::new_v4()))
+    } else {
+        base.join("profile")
+    };
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+async fn handle_socks_client(
+    mut stream: TcpStream,
+    originator: SocketAddr,
+    handle: Arc<Mutex<Handle<SSHClient>>>,
+) -> Result<()> {
+    // SOCKS5 handshake
+    let mut header = [0u8; 2];
+    stream.read_exact(&mut header).await?;
+    if header[0] != 0x05 {
+        return Err(anyhow::anyhow!("Unsupported SOCKS version"));
+    }
+
+    let methods_len = header[1] as usize;
+    let mut methods = vec![0u8; methods_len];
+    stream.read_exact(&mut methods).await?;
+    if !methods.iter().any(|m| *m == 0x00) {
+        stream.write_all(&[0x05, 0xFF]).await?;
+        return Err(anyhow::anyhow!("No supported auth method"));
+    }
+    stream.write_all(&[0x05, 0x00]).await?;
+
+    // SOCKS5 request
+    let mut req = [0u8; 4];
+    stream.read_exact(&mut req).await?;
+    if req[0] != 0x05 {
+        return Err(anyhow::anyhow!("Invalid request version"));
+    }
+    if req[1] != 0x01 {
+        // Only CONNECT supported
+        stream
+            .write_all(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+            .await?;
+        return Err(anyhow::anyhow!("Unsupported command"));
+    }
+
+    let atyp = req[3];
+    let host = match atyp {
+        0x01 => {
+            let mut addr = [0u8; 4];
+            stream.read_exact(&mut addr).await?;
+            Ipv4Addr::from(addr).to_string()
+        }
+        0x03 => {
+            let mut len = [0u8; 1];
+            stream.read_exact(&mut len).await?;
+            let mut domain = vec![0u8; len[0] as usize];
+            stream.read_exact(&mut domain).await?;
+            String::from_utf8(domain)?
+        }
+        0x04 => {
+            let mut addr = [0u8; 16];
+            stream.read_exact(&mut addr).await?;
+            Ipv6Addr::from(addr).to_string()
+        }
+        _ => {
+            return Err(anyhow::anyhow!("Unsupported address type"));
+        }
+    };
+
+    let mut port_buf = [0u8; 2];
+    stream.read_exact(&mut port_buf).await?;
+    let port = u16::from_be_bytes(port_buf);
+
+    let mut channel = match {
+        let mut handle = handle.lock().await;
+        handle
+            .channel_open_direct_tcpip(
+                host.clone(),
+                port.into(),
+                originator.ip().to_string(),
+                originator.port().into(),
+            )
+            .await
+    } {
+        Ok(channel) => channel,
+        Err(err) => {
+            stream
+                .write_all(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+                .await?;
+            return Err(anyhow::anyhow!("Open channel failed: {err}"));
+        }
+    };
+
+    stream
+        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+        .await?;
+
+    proxy_data(stream, &mut channel).await?;
+    Ok(())
+}
+
+async fn proxy_data(
+    mut stream: TcpStream,
+    channel: &mut russh::Channel<russh::client::Msg>,
+) -> Result<()> {
+    let mut client_closed = false;
+    let mut buf = vec![0u8; 16 * 1024];
+
+    loop {
+        tokio::select! {
+            read_res = stream.read(&mut buf), if !client_closed => {
+                match read_res {
+                    Ok(0) => {
+                        client_closed = true;
+                        let _ = channel.eof().await;
+                    }
+                    Ok(n) => {
+                        channel.data(&buf[..n]).await?;
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            msg = channel.wait() => {
+                match msg {
+                    Some(russh::ChannelMsg::Data { data }) => {
+                        stream.write_all(&data).await?;
+                    }
+                    Some(russh::ChannelMsg::Eof) | Some(russh::ChannelMsg::Close) | None => {
+                        break;
+                    }
+                    Some(russh::ChannelMsg::ExitStatus { .. }) => {}
+                    Some(russh::ChannelMsg::WindowAdjusted { .. }) => {}
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+
+    let _ = channel.close().await;
+    let _ = stream.shutdown().await;
+    Ok(())
 }
 
 // 系统监控实现
@@ -403,37 +643,37 @@ impl SSHSession {
         }
         0.0
     }
+}
 
-    // 辅助函数：获取进程状态描述
-    fn get_status_description(status: &str) -> String {
-        let first_char = status.chars().next().unwrap_or('?');
-        match first_char {
-            'R' => "运行中".to_string(),
-            'S' => "睡眠中".to_string(),
-            'D' => "不可中断睡眠".to_string(),
-            'Z' => "僵尸进程".to_string(),
-            'T' => "已停止".to_string(),
-            't' => "追踪停止".to_string(),
-            'W' => "内存分页".to_string(),
-            'X' => "死亡".to_string(),
-            'x' => "死亡".to_string(),
-            'K' => "内核线程".to_string(),
-            'P' => "暂停".to_string(),
-            _ => "未知".to_string(),
-        }
+// 辅助函数：获取进程状态描述
+fn get_status_description(status: &str) -> String {
+    let first_char = status.chars().next().unwrap_or('?');
+    match first_char {
+        'R' => "运行中".to_string(),
+        'S' => "睡眠中".to_string(),
+        'D' => "不可中断睡眠".to_string(),
+        'Z' => "僵尸进程".to_string(),
+        'T' => "已停止".to_string(),
+        't' => "追踪停止".to_string(),
+        'W' => "内存分页".to_string(),
+        'X' => "死亡".to_string(),
+        'x' => "死亡".to_string(),
+        'K' => "内核线程".to_string(),
+        'P' => "暂停".to_string(),
+        _ => "未知".to_string(),
     }
+}
 
-    // 辅助函数：从完整命令行提取进程名
-    fn extract_process_name(command: &str) -> String {
-        // 提取命令名（去除路径和参数）
-        command
-            .split_whitespace()
-            .next()
-            .map(|s| {
-                s.split('/').last().unwrap_or(s).to_string()
-            })
-            .unwrap_or_else(|| "unknown".to_string())
-    }
+// 辅助函数：从完整命令行提取进程名
+fn extract_process_name(command: &str) -> String {
+    // 提取命令名（去除路径和参数）
+    command
+        .split_whitespace()
+        .next()
+        .map(|s| {
+            s.split('/').last().unwrap_or(s).to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 // 全局会话管理
@@ -532,6 +772,82 @@ async fn disconnect_ssh(session_id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn browser_open(
+    session_id: String,
+    url: String,
+    options: Option<BrowserLaunchOptions>,
+) -> Result<(), String> {
+    let target_url = normalize_url(&url)?;
+    let host = target_url
+        .host_str()
+        .ok_or_else(|| "无法解析 URL 主机".to_string())?;
+    let port = target_url
+        .port_or_known_default()
+        .ok_or_else(|| "无法解析 URL 端口".to_string())?;
+    let profile_mode = options
+        .as_ref()
+        .and_then(|opt| opt.profile_mode.as_ref())
+        .map(|s| s.as_str())
+        .unwrap_or("session");
+
+    let session_arc = {
+        let sessions = get_sessions();
+        let sessions = sessions.lock().await;
+        sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| "Session not found".to_string())?
+    };
+
+    let mut session = session_arc.lock().await;
+    if let Err(err) = session.check_direct_tcpip(host, port).await {
+        return Err(format!(
+            "SSH 端口转发失败：{}。请确认远端允许 AllowTcpForwarding 并且能访问目标站点。",
+            err
+        ));
+    }
+
+    let proxy_port = session
+        .ensure_socks_proxy()
+        .await
+        .map_err(|e| format!("启动 SOCKS 代理失败：{e}"))?;
+    drop(session);
+
+    let proxy_arg = format!("--proxy-server=socks5://127.0.0.1:{proxy_port}");
+    let profile_dir = chrome_profile_dir(&session_id, profile_mode)?;
+    let profile_arg = format!("--user-data-dir={}", profile_dir.display());
+
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("open")
+            .args([
+                "-na",
+                "Google Chrome",
+                "--args",
+                &proxy_arg,
+                &profile_arg,
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--new-window",
+                target_url.as_str(),
+            ])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if !status.success() {
+            return Err("打开 Chrome 失败，请确认已安装 Google Chrome".to_string());
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (proxy_arg, profile_arg, target_url);
+        Err("当前仅实现 macOS 的 Chrome 启动方案".to_string())
+    }
+}
+
 // 全局数据库实例
 static DATABASE: OnceLock<Mutex<Option<Database>>> = OnceLock::new();
 
@@ -598,7 +914,7 @@ async fn test_connection(
     let config = Arc::new(config);
 
     let (tx, _rx) = mpsc::channel::<Vec<u8>>(16);
-    let client = SSHClient::new(tx);
+    let client = SSHClient::new(tx, Arc::new(Mutex::new(None)));
 
     let mut handle = match russh::client::connect(config, (host.as_str(), port), client).await {
         Ok(h) => h,
@@ -647,6 +963,8 @@ async fn kill_process(session_id: String, pid: u32, signal: Option<i32>) -> Resu
 
 #[tauri::command]
 async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
+    log::info!("Getting system stats for session: {}", session_id);
+    
     let sessions = get_sessions();
     let sessions = sessions.lock().await;
 
@@ -657,20 +975,27 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
         // 为了简单起见，我们使用单一的复合命令来减少 RTT
         // 注意：不同发行版命令可能不同，这里假设是标准 Linux 环境
         // 使用 ps 命令获取详细的进程信息，格式化为管道分隔
+        // 使用独特的分隔符避免与命令输出冲突
         let cmd = r#"
-            echo "---CPU---"; top -bn1 | head -n 5; 
-            echo "---MEM---"; free -b; 
-            echo "---DISK---"; df -B1 -x tmpfs -x devtmpfs; 
-            echo "---NET---"; cat /proc/net/dev;
-            echo "---PROC---"; ps -eo pid,user,pcpu,pmem,vsz,rss,stat,nlwp,start,etime,nice,ppid,comm:50,args:200 --sort=-pcpu | head -n 21 | awk 'NR==1 {print "PID|USER|CPU|MEM|VSZ|RSS|STAT|NLWP|START|ELAPSED|NICE|PPID|COMM|ARGS"} NR>1 {printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, substr($0, index($0,$14))}' 2>/dev/null || ps aux --sort=-%cpu | head -n 21;
-            echo "---SYS---"; hostname; uptime -p; uname -r; nproc; awk '{print $1" "$2" "$3}' /proc/loadavg
+            echo "@@@SECTION:CPU@@@"; top -bn1 | head -n 5; 
+            echo "@@@SECTION:MEM@@@"; free -b; 
+            echo "@@@SECTION:DISK@@@"; df -B1 -x tmpfs -x devtmpfs; 
+            echo "@@@SECTION:NET@@@"; cat /proc/net/dev;
+            echo "@@@SECTION:PROC@@@"; ps aux --sort=-%cpu | head -n 21 | awk 'BEGIN {print "PID|USER|CPU|MEM|VSZ|RSS|STAT|START|TIME|COMMAND"} NR>1 {printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n", $2, $1, $3, $4, $5, $6, $8, $9, $10, substr($0, index($0,$11))}' ;
+            echo "@@@SECTION:SYS@@@"; hostname; uptime -p; uname -r; nproc; awk '{print $1" "$2" "$3}' /proc/loadavg
         "#;
 
-        let output = session.exec_command(cmd).await.map_err(|e| e.to_string())?;
+        let output = session.exec_command(cmd).await.map_err(|e| {
+            log::error!("Exec command failed: {}", e);
+            e.to_string()
+        })?;
+        
+        log::debug!("System stats output length: {}", output.len());
+        log::debug!("Raw output preview: {}", &output[..output.len().min(500)]);
 
-        // 解析输出
-        // 这里需要比较稳健的解析逻辑
-        let sections: Vec<&str> = output.split("---").collect();
+        // 解析输出 - 使用更独特的分隔符
+        let sections: Vec<&str> = output.split("@@@SECTION:").collect();
+        log::debug!("Found {} sections", sections.len());
 
         // 初始化默认值
         let mut stats = SystemStats {
@@ -698,14 +1023,20 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
         };
 
         for section in sections {
-            if section.starts_with("CPU---") {
+            let section = section.trim();
+            if section.is_empty() {
+                continue;
+            }
+            log::debug!("Processing section: {}", &section[..section.len().min(30)]);
+            
+            if section.starts_with("CPU@@@") || section.starts_with("CPU") {
                 stats.cpu_percent = SSHSession::parse_cpu(section);
-            } else if section.starts_with("MEM---") {
+            } else if section.starts_with("MEM@@@") || section.starts_with("MEM") {
                 stats.memory = SSHSession::parse_memory(section);
                 stats.system.total_memory = stats.memory.total;
-            } else if section.starts_with("DISK---") {
+            } else if section.starts_with("DISK@@@") || section.starts_with("DISK") {
                 stats.disks = SSHSession::parse_disks(section);
-            } else if section.starts_with("NET---") {
+            } else if section.starts_with("NET@@@") || section.starts_with("NET") {
                 // 解析网络流量 (简单累加所有接口)
                 let mut rx = 0;
                 let mut tx = 0;
@@ -744,51 +1075,69 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
                     rx_bytes: rx,
                     tx_bytes: tx,
                 };
-            } else if section.starts_with("PROC---") {
-                // 解析增强的进程信息
-                // 格式: PID|USER|CPU|MEM|VSZ|RSS|STAT|NLWP|START|ELAPSED|NICE|PPID|COMMAND
-                let lines: Vec<&str> = section.lines().collect();
-                for line in lines.iter().skip(1) {
-                    // Skip header
+            } else if section.starts_with("PROC@@@") || section.starts_with("PROC") {
+                // 解析进程信息
+                // 格式: PID|USER|CPU|MEM|VSZ|RSS|STAT|START|TIME|COMMAND
+                let content = section.strip_prefix("PROC@@@").unwrap_or(
+                    section.strip_prefix("PROC").unwrap_or(section)
+                ).trim();
+                let lines: Vec<&str> = content.lines().collect();
+                log::debug!("PROC section lines count: {}", lines.len());
+                
+                for (idx, line) in lines.iter().enumerate().skip(1) {
+                    if line.trim().is_empty() { continue; }
+                    
                     let parts: Vec<&str> = line.split('|').collect();
-                    if parts.len() >= 13 {
-                        let status = parts[6].to_string();
-                        let status_desc = Self::get_status_description(&status);
+                    log::debug!("Line {} parts: {:?}", idx, parts);
+                    
+                    if parts.len() >= 10 {
+                        let pid_str = parts[0].trim();
+                        // 跳过表头行
+                        if pid_str == "PID" || pid_str.parse::<u32>().is_err() {
+                            continue;
+                        }
+                        
+                        let status = parts[6].trim().to_string();
+                        let status_desc = get_status_description(&status);
                         
                         stats.processes.push(ProcessInfo {
-                            pid: parts[0].parse().unwrap_or(0u32),
-                            user: parts[1].to_string(),
-                            cpu: parts[2].parse().unwrap_or(0.0),
-                            memory: parts[3].parse().unwrap_or(0.0),
-                            name: Self::extract_process_name(parts[12]),
+                            pid: pid_str.parse().unwrap_or(0u32),
+                            user: parts[1].trim().to_string(),
+                            cpu: parts[2].trim().parse().unwrap_or(0.0),
+                            memory: parts[3].trim().parse().unwrap_or(0.0),
+                            name: extract_process_name(parts[9]),
                             status: status.clone(),
                             status_desc,
-                            start_time: parts[8].to_string(),
-                            elapsed_time: parts[9].to_string(),
-                            threads: parts[7].parse().unwrap_or(1u32),
-                            rss: parts[5].parse().unwrap_or(0u64),
-                            vsz: parts[4].parse().unwrap_or(0u64),
-                            command: parts[12].to_string(),
-                            ppid: parts[11].parse().unwrap_or(0u32),
-                            nice: parts[10].parse().unwrap_or(0i32),
+                            start_time: parts[7].trim().to_string(),
+                            elapsed_time: parts[8].trim().to_string(),
+                            vsz: parts[4].trim().parse().unwrap_or(0u64),
+                            rss: parts[5].trim().parse().unwrap_or(0u64),
+                            command: parts[9].trim().to_string(),
                         });
                     }
                 }
-            } else if section.starts_with("SYS---") {
-                let lines: Vec<&str> = section.trim().lines().skip(1).collect(); // Skip "SYS---" residue
-                if lines.len() >= 1 {
-                    stats.system.hostname = lines[0].to_string();
+                log::debug!("Parsed {} processes", stats.processes.len());
+            } else if section.starts_with("SYS@@@") || section.starts_with("SYS") {
+                // 移除 "SYS@@@" 前缀并解析剩余内容
+                let content = section.strip_prefix("SYS@@@").unwrap_or(
+                    section.strip_prefix("SYS").unwrap_or(section)
+                ).trim();
+                let lines: Vec<&str> = content.lines().collect();
+                log::debug!("SYS section lines: {:?}", lines);
+                
+                if lines.len() >= 1 && !lines[0].is_empty() {
+                    stats.system.hostname = lines[0].trim().to_string();
                 }
-                if lines.len() >= 2 {
-                    stats.system.uptime = lines[1].to_string();
+                if lines.len() >= 2 && !lines[1].is_empty() {
+                    stats.system.uptime = lines[1].trim().to_string();
                 }
-                if lines.len() >= 3 {
-                    stats.system.kernel_version = lines[2].to_string();
+                if lines.len() >= 3 && !lines[2].is_empty() {
+                    stats.system.kernel_version = lines[2].trim().to_string();
                 }
-                if lines.len() >= 4 {
-                    stats.system.cpu_cores = lines[3].parse().unwrap_or(1u32);
+                if lines.len() >= 4 && !lines[3].is_empty() {
+                    stats.system.cpu_cores = lines[3].trim().parse().unwrap_or(1u32);
                 }
-                if lines.len() >= 5 {
+                if lines.len() >= 5 && !lines[4].is_empty() {
                     let loads: Vec<&str> = lines[4].split_whitespace().collect();
                     if loads.len() >= 3 {
                         stats.system.load_average = [
@@ -810,7 +1159,7 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
 // 需要在 run() 中注册新命令
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -820,6 +1169,7 @@ pub fn run() {
             write_to_pty,
             resize_pty,
             disconnect_ssh,
+            browser_open,
             list_machines,
             add_machine,
             update_machine,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import Terminal from "./Terminal.vue";
 import DesktopWallpaper from "./desktop/DesktopWallpaper.vue";
 import DesktopIcons from "./desktop/DesktopIcons.vue";
@@ -11,13 +12,14 @@ import DesktopStatusBar from "./desktop/DesktopStatusBar.vue";
 import FilesApp from "./apps/FilesApp.vue";
 import ActivityMonitor from "./apps/ActivityMonitor.vue";
 
-type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center";
+type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser";
 
 const props = defineProps<{
   initialSession?: string;
 }>();
 
 const isConnected = ref(true);
+const browserError = ref("");
 const sessionId = computed(() => {
   console.log("DesktopShell sessionId:", props.initialSession);
   return props.initialSession || "default-session";
@@ -29,7 +31,7 @@ const desktopItems: DesktopIconItem[] = [
   { id: "terminal", label: "终端", icon: "icon-[mdi--console]", color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)", app: "terminal" },
   { id: "files", label: "访达", icon: "icon-[mdi--folder]", color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)", app: "files" },
   { id: "database", label: "数据库", icon: "icon-[mdi--database]", color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)" },
-  { id: "web", label: "Safari", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)" },
+  { id: "web", label: "Safari", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
   { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)", app: "settings" },
   { id: "tasks", label: "活动监视器", icon: "icon-[mdi--chart-line]", color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)", app: "monitor" },
   { id: "apps", label: "应用中心", icon: "icon-[mdi--apps]", color: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)", app: "app-center" },
@@ -41,6 +43,7 @@ const desktopItems: DesktopIconItem[] = [
 const dockItems: DockItem[] = [
   { id: "files", label: "访达", icon: "icon-[mdi--folder]", app: "files" },
   { id: "terminal", label: "终端", icon: "icon-[mdi--console]", app: "terminal" },
+  { id: "browser", label: "浏览器", icon: "icon-[mdi--compass]", app: "browser" },
   { id: "monitor", label: "活动监视器", icon: "icon-[mdi--chart-line]", app: "monitor" },
   { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", app: "settings" },
   { id: "trash", label: "废纸篓", icon: "icon-[mdi--delete]" },
@@ -53,6 +56,7 @@ const appTitles: Record<AppId, string> = {
   monitor: "任务管理器",
   settings: "设置",
   "app-center": "应用中心",
+  browser: "浏览器",
 };
 
 // 应用状态管理
@@ -60,8 +64,33 @@ const openApps = ref<AppId[]>([]);
 const focusedApp = ref<AppId | null>(null);
 const desktopIconsRef = ref<InstanceType<typeof DesktopIcons> | null>(null);
 
-function openApp(id: string) {
+function formatInvokeError(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+async function openApp(id: string) {
   const appId = id as AppId;
+  if (appId === "browser") {
+    try {
+      browserError.value = "";
+      await invoke("browser_open", {
+        sessionId: sessionId.value,
+        url: "https://www.baidu.com",
+        options: { profileMode: "new" },
+      });
+    } catch (error) {
+      const message = formatInvokeError(error);
+      browserError.value = message || "打开 Chrome 失败";
+      console.error("打开 Chrome 失败:", error);
+    }
+    return;
+  }
   if (!openApps.value.includes(appId)) {
     openApps.value.push(appId);
   }
@@ -99,6 +128,11 @@ const connectionStatus = computed(() => (isConnected.value ? "已连接" : "未�
 
 <template>
   <div class="desktop" @click.self="clearDesktopSelection">
+    <div v-if="browserError" class="browser-error">
+      <span class="icon-[mdi--alert-circle]"></span>
+      <span class="browser-error-text">{{ browserError }}</span>
+      <button class="browser-error-close" @click="browserError = ''">✕</button>
+    </div>
     <!-- 壁纸背景 -->
     <DesktopWallpaper />
 
@@ -145,6 +179,37 @@ const connectionStatus = computed(() => (isConnected.value ? "已连接" : "未�
   height: 100vh;
   overflow: hidden;
   color: var(--text-primary);
+}
+
+.browser-error {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(20, 14, 14, 0.9);
+  border: 1px solid rgba(255, 122, 122, 0.45);
+  color: #ffd5d5;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  z-index: 6;
+  max-width: min(920px, 90vw);
+}
+
+.browser-error-text {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.browser-error-close {
+  border: none;
+  background: transparent;
+  color: #ffd5d5;
+  cursor: pointer;
+  font-size: 14px;
 }
 
 .window-layer {

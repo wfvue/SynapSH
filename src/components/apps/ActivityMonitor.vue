@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import CpuChart from "./monitor/CpuChart.vue";
 import MemoryChart from "./monitor/MemoryChart.vue";
@@ -14,8 +14,13 @@ const props = defineProps<{
 }>();
 
 type TabId = "overview" | "cpu" | "memory" | "disk" | "network" | "processes";
+type ConnectionStatus = "connecting" | "connected" | "error" | "idle";
 
 const activeTab = ref<TabId>("overview");
+
+// 连接状态
+const connectionStatus = ref<ConnectionStatus>("idle");
+const errorMessage = ref<string>("");
 
 // 进程详情抽屉状态
 const selectedProcess = ref<ProcessInfo | null>(null);
@@ -69,11 +74,11 @@ const memoryData = ref<MemoryInfo>({ total: 0, used: 0, free: 0, cached: 0 });
 const diskData = ref<DiskInfo[]>([]);
 const processes = ref<ProcessInfo[]>([]);
 const systemInfo = ref<SystemInfo>({
-    hostname: "Loading...",
-    uptime: "Loading...",
+    hostname: "Unknown",
+    uptime: "---",
     loadAverage: [0, 0, 0],
-    cpuCores: 0,
-    kernelVersion: "Loading...",
+    cpuCores: 1,
+    kernelVersion: "---",
     totalMemory: 0,
 });
 
@@ -81,6 +86,14 @@ let refreshInterval: number | null = null;
 let lastNetworkStats: NetworkInfo | null = null;
 
 async function refreshData() {
+    if (!props.sessionId || props.sessionId === "default-session") {
+        connectionStatus.value = "error";
+        errorMessage.value = "未连接到 SSH 会话";
+        return;
+    }
+
+    connectionStatus.value = "connecting";
+    
     try {
         const stats = await invoke<SystemStats>("get_system_stats", { sessionId: props.sessionId });
 
@@ -89,10 +102,6 @@ async function refreshData() {
 
         // 更新网络 (计算速率)
         if (lastNetworkStats) {
-            // 计算每秒字节数 (假设间隔是 2000ms, 但最好根据 timestamp 算)
-            // 这里我们只是简单展示两次通过 SSH 获取数据的差值，这代表了这个间隔内的流量
-            // 如果间隔是 2s，那么速率其实是 diff/2。但图表展示的是"流量"，
-            // 我们可以直接展示差值作为"Recent Traffic"
             const rxDiff = Math.max(0, stats.network.rxBytes - lastNetworkStats.rxBytes);
             const txDiff = Math.max(0, stats.network.txBytes - lastNetworkStats.txBytes);
 
@@ -106,10 +115,13 @@ async function refreshData() {
         diskData.value = stats.disks;
         processes.value = stats.processes;
         systemInfo.value = stats.system;
-    } catch (e) {
+        
+        connectionStatus.value = "connected";
+        errorMessage.value = "";
+    } catch (e: any) {
         console.error("Failed to fetch system stats:", e);
-        // Error handling: maybe stop refreshing or show error?
-        // systemInfo.value.hostname = "Connection Error";
+        connectionStatus.value = "error";
+        errorMessage.value = e?.toString?.() || "获取系统数据失败";
     }
 }
 
@@ -124,12 +136,18 @@ function handleCloseDetail() {
 }
 
 function handleProcessKilled(pid: number) {
-    // 从列表中移除已终止的进程
     processes.value = processes.value.filter(p => p.pid !== pid);
 }
 
+// 监听 sessionId 变化
+watch(() => props.sessionId, (newSessionId) => {
+    if (newSessionId && newSessionId !== "default-session") {
+        refreshData();
+    }
+}, { immediate: true });
+
 onMounted(() => {
-    refreshData(); // Fetch immediately
+    refreshData();
     refreshInterval = window.setInterval(refreshData, 2000);
 });
 
@@ -142,6 +160,15 @@ onUnmounted(() => {
 
 <template>
     <div class="activity-monitor">
+        <!-- 连接状态提示 -->
+        <div v-if="connectionStatus === 'error'" class="connection-alert">
+            <span class="icon-[mdi--alert-circle] alert-icon"></span>
+            <span class="alert-text">{{ errorMessage }}</span>
+            <button class="retry-btn" @click="refreshData">
+                <span class="icon-[mdi--refresh]"></span> 重试
+            </button>
+        </div>
+
         <!-- 侧边栏 -->
         <aside class="monitor-sidebar">
             <div v-for="tab in tabs" :key="tab.id" class="tab-item" :class="{ active: activeTab === tab.id }"
@@ -221,6 +248,45 @@ onUnmounted(() => {
     overflow: hidden;
 }
 
+.connection-alert {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: rgba(239, 68, 68, 0.9);
+    border-radius: 8px;
+    color: white;
+    font-size: 0.85rem;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.alert-icon {
+    font-size: 18px;
+}
+
+.retry-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.retry-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
 .monitor-sidebar {
     display: flex;
     flex-direction: column;
@@ -272,12 +338,29 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-height: 100%;
 }
 
 .overview-charts {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
-    min-height: 200px;
+    height: 260px;
+    min-height: 260px;
+}
+
+.overview-charts > * {
+    height: 100%;
+    min-height: 240px;
+}
+
+@media (max-width: 900px) {
+    .overview-charts {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+    .overview-charts > * {
+        min-height: 200px;
+    }
 }
 </style>

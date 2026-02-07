@@ -75,8 +75,20 @@ function formatBytes(bytes: number): string {
 <style scoped>
 .system-overview {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
+}
+
+@media (max-width: 800px) {
+    .system-overview {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 500px) {
+    .system-overview {
+        grid-template-columns: 1fr;
+    }
 }
 
 .info-card {
@@ -117,5 +129,9 @@ function formatBytes(bytes: number): string {
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.9);
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 </style>

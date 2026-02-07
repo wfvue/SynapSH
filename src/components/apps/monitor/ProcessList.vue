@@ -12,12 +12,9 @@ export interface ProcessInfo {
     statusDesc: string;
     startTime: string;
     elapsedTime: string;
-    threads: number;
     rss: number;
     vsz: number;
     command: string;
-    ppid: number;
-    nice: number;
 }
 
 const props = defineProps<{
@@ -36,16 +33,14 @@ const killingPid = ref<number | null>(null);
 
 // 列配置
 const columns = [
-    { key: "pid", label: "PID", width: "70px", sortable: true },
-    { key: "name", label: "进程名", width: "1.5fr", sortable: true },
-    { key: "user", label: "用户", width: "100px", sortable: true },
-    { key: "statusDesc", label: "状态", width: "90px", sortable: true },
-    { key: "cpu", label: "CPU", width: "70px", sortable: true },
-    { key: "memory", label: "内存", width: "70px", sortable: true },
-    { key: "rss", label: "物理内存", width: "90px", sortable: true },
-    { key: "threads", label: "线程", width: "60px", sortable: true },
-    { key: "nice", label: "优先级", width: "70px", sortable: true },
-    { key: "elapsedTime", label: "运行时长", width: "100px", sortable: true },
+    { key: "pid", label: "PID", width: "80px", sortable: true },
+    { key: "name", label: "进程名", width: "2fr", sortable: true },
+    { key: "user", label: "用户", width: "90px", sortable: true },
+    { key: "statusDesc", label: "状态", width: "80px", sortable: true },
+    { key: "cpu", label: "CPU %", width: "70px", sortable: true },
+    { key: "memory", label: "内存 %", width: "70px", sortable: true },
+    { key: "rss", label: "物理内存", width: "100px", sortable: true },
+    { key: "elapsedTime", label: "CPU时间", width: "90px", sortable: true },
 ];
 
 // 格式化字节
@@ -196,8 +191,6 @@ function handleRowClick(process: ProcessInfo) {
                 <span class="col col-cpu" :class="{ high: proc.cpu > 50 }">{{ proc.cpu.toFixed(1) }}%</span>
                 <span class="col col-mem" :class="{ high: proc.memory > 50 }">{{ proc.memory.toFixed(1) }}%</span>
                 <span class="col col-rss">{{ formatBytes(proc.rss) }}</span>
-                <span class="col col-threads">{{ proc.threads }}</span>
-                <span class="col col-nice">{{ proc.nice }}</span>
                 <span class="col col-elapsed">{{ proc.elapsedTime }}</span>
                 <span class="col col-action">
                     <button 
