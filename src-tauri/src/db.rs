@@ -190,6 +190,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn get_machine(&self, id: &str) -> Result<Option<Machine>> {
         let machine = sqlx::query_as::<_, Machine>("SELECT * FROM machines WHERE id = ?")
             .bind(id)

@@ -21,6 +21,7 @@ use db::{Database, Machine, MachineInput};
 pub struct SSHSession {
     handle: Arc<Mutex<Handle<SSHClient>>>,
     channel: russh::Channel<russh::client::Msg>,
+    #[allow(dead_code)]
     shell_channel_id: Arc<Mutex<Option<ChannelId>>>,
     socks_proxy: Option<SocksProxy>,
 }
@@ -243,7 +244,7 @@ impl SSHSession {
     }
 
     pub async fn disconnect(self) -> Result<()> {
-        let mut handle = self.handle.lock().await;
+        let handle = self.handle.lock().await;
         handle
             .disconnect(Disconnect::ByApplication, "", "")
             .await?;
@@ -253,8 +254,8 @@ impl SSHSession {
     /// 执行一次性命令并返回输出
     pub async fn exec_command(&self, command: &str) -> Result<String> {
         let mut channel = {
-            let mut handle = self.handle.lock().await;
-            let mut channel = handle.channel_open_session().await?;
+            let handle = self.handle.lock().await;
+            let channel = handle.channel_open_session().await?;
             channel.exec(true, command).await?;
             channel
         };
@@ -279,8 +280,8 @@ impl SSHSession {
     }
 
     pub async fn check_direct_tcpip(&self, host: &str, port: u16) -> Result<()> {
-        let mut handle = self.handle.lock().await;
-        let mut channel = handle
+        let handle = self.handle.lock().await;
+        let channel = handle
             .channel_open_direct_tcpip(
                 host.to_string(),
                 port.into(),
@@ -513,7 +514,7 @@ async fn handle_socks_client(
     let port = u16::from_be_bytes(port_buf);
 
     let mut channel = match {
-        let mut handle = handle.lock().await;
+        let handle = handle.lock().await;
         handle
             .channel_open_direct_tcpip(
                 host.clone(),
@@ -1045,7 +1046,7 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
                         let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.len() >= 10 {
                             // parts[0] is "eth0:" or "eth0", parts[1] is RX bytes
-                            let rx_str = if parts[0].ends_with(":") {
+                            let _rx_str = if parts[0].ends_with(":") {
                                 parts[1]
                             } else {
                                 parts[2]
