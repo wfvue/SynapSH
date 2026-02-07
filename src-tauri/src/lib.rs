@@ -1,14 +1,18 @@
 use anyhow::Result;
+use log::info;
 use russh::client::Handle;
-use russh::{ChannelId, Disconnect};
 use russh::keys::PublicKey;
+use russh::CryptoVec;
+use russh::{ChannelId, Disconnect};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
-use russh::CryptoVec;
-use log::info;
+use std::sync::OnceLock;
 use tauri::Emitter;
+use tokio::sync::{mpsc, Mutex};
+
+mod db;
+use db::{Database, Machine, MachineInput};
 
 // SSH 会话管理
 pub struct SSHSession {
@@ -27,7 +31,7 @@ impl SSHSession {
         session_id: String,
     ) -> Result<Self> {
         info!("开始连接 SSH: {}:{} 用户: {}", host, port, username);
-        
+
         let config = russh::client::Config {
             inactivity_timeout: Some(std::time::Duration::from_secs(300)),
             ..Default::default()
@@ -46,11 +50,11 @@ impl SSHSession {
         let authenticated = if let Some(key_path) = private_key {
             info!("使用密钥认证: {}", key_path);
             let key_pair = russh::keys::load_secret_key(key_path, None)?;
-            let key_with_hash = russh::keys::PrivateKeyWithHashAlg::new(
-                Arc::new(key_pair),
-                None
-            );
-            handle.authenticate_publickey(username, key_with_hash).await.is_ok()
+            let key_with_hash = russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key_pair), None);
+            handle
+                .authenticate_publickey(username, key_with_hash)
+                .await
+                .is_ok()
         } else if let Some(pass) = password {
             info!("使用密码认证");
             handle.authenticate_password(username, pass).await.is_ok()
@@ -67,7 +71,9 @@ impl SSHSession {
         // 打开通道
         info!("打开 SSH 通道...");
         let channel = handle.channel_open_session().await?;
-        channel.request_pty(false, "xterm-256color", 80, 24, 0, 0, &[]).await?;
+        channel
+            .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
+            .await?;
         channel.request_shell(false).await?;
 
         let channel_id = channel.id();
@@ -81,20 +87,20 @@ impl SSHSession {
             while let Some(data) = rx.recv().await {
                 // 将数据发送到前端
                 let data_base64 = base64_encode(&data);
-                let _ = app_handle_clone.emit(&format!("ssh-data-{}", session_id_clone), data_base64);
+                let _ =
+                    app_handle_clone.emit(&format!("ssh-data-{}", session_id_clone), data_base64);
             }
             info!("数据转发任务结束");
         });
 
-        Ok(SSHSession {
-            handle,
-            channel_id,
-        })
+        Ok(SSHSession { handle, channel_id })
     }
 
     pub async fn write(&self, data: &[u8]) -> Result<()> {
         let crypto_vec = CryptoVec::from_slice(data);
-        self.handle.data(self.channel_id, crypto_vec).await
+        self.handle
+            .data(self.channel_id, crypto_vec)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to write data: {:?}", e))?;
         Ok(())
     }
@@ -105,7 +111,9 @@ impl SSHSession {
     }
 
     pub async fn disconnect(self) -> Result<()> {
-        self.handle.disconnect(Disconnect::ByApplication, "", "").await?;
+        self.handle
+            .disconnect(Disconnect::ByApplication, "", "")
+            .await?;
         Ok(())
     }
 }
@@ -124,13 +132,19 @@ impl SSHClient {
 impl russh::client::Handler for SSHClient {
     type Error = anyhow::Error;
 
-    fn check_server_key(&mut self, _server_public_key: &PublicKey) -> impl std::future::Future<Output = Result<bool>> + Send {
-        async move {
-            Ok(true)
-        }
+    fn check_server_key(
+        &mut self,
+        _server_public_key: &PublicKey,
+    ) -> impl std::future::Future<Output = Result<bool>> + Send {
+        async move { Ok(true) }
     }
 
-    fn data(&mut self, _channel: ChannelId, data: &[u8], _session: &mut russh::client::Session) -> impl std::future::Future<Output = Result<()>> + Send {
+    fn data(
+        &mut self,
+        _channel: ChannelId,
+        data: &[u8],
+        _session: &mut russh::client::Session,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
         let data = data.to_vec();
         let tx = self.tx.clone();
         async move {
@@ -139,7 +153,13 @@ impl russh::client::Handler for SSHClient {
         }
     }
 
-    fn extended_data(&mut self, _channel: ChannelId, _ext: u32, data: &[u8], _session: &mut russh::client::Session) -> impl std::future::Future<Output = Result<()>> + Send {
+    fn extended_data(
+        &mut self,
+        _channel: ChannelId,
+        _ext: u32,
+        data: &[u8],
+        _session: &mut russh::client::Session,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
         let data = data.to_vec();
         let tx = self.tx.clone();
         async move {
@@ -151,12 +171,11 @@ impl russh::client::Handler for SSHClient {
 
 // base64 编码函数
 fn base64_encode(data: &[u8]) -> String {
-    use base64::{Engine as _, engine::general_purpose};
+    use base64::{engine::general_purpose, Engine as _};
     general_purpose::STANDARD.encode(data)
 }
 
 // 全局会话管理
-use std::sync::OnceLock;
 
 static SESSIONS: OnceLock<Mutex<HashMap<String, Arc<Mutex<SSHSession>>>>> = OnceLock::new();
 
@@ -180,8 +199,11 @@ async fn connect_ssh(
     params: SSHConnectionParams,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    info!("收到连接请求: session_id={}, params={:?}", session_id, params);
-    
+    info!(
+        "收到连接请求: session_id={}, params={:?}",
+        session_id, params
+    );
+
     let session = SSHSession::connect(
         &params.host,
         params.port,
@@ -209,12 +231,15 @@ async fn connect_ssh(
 async fn write_to_pty(session_id: String, data: String) -> Result<(), String> {
     let sessions = get_sessions();
     let sessions = sessions.lock().await;
-    
+
     if let Some(session) = sessions.get(&session_id) {
         let session = session.lock().await;
-        session.write(data.as_bytes()).await.map_err(|e| e.to_string())?;
+        session
+            .write(data.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
@@ -222,12 +247,15 @@ async fn write_to_pty(session_id: String, data: String) -> Result<(), String> {
 async fn resize_pty(session_id: String, cols: u32, rows: u32) -> Result<(), String> {
     let sessions = get_sessions();
     let sessions = sessions.lock().await;
-    
+
     if let Some(session) = sessions.get(&session_id) {
         let session = session.lock().await;
-        session.resize(cols, rows).await.map_err(|e| e.to_string())?;
+        session
+            .resize(cols, rows)
+            .await
+            .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
@@ -235,18 +263,109 @@ async fn resize_pty(session_id: String, cols: u32, rows: u32) -> Result<(), Stri
 async fn disconnect_ssh(session_id: String) -> Result<(), String> {
     let sessions = get_sessions();
     let mut sessions = sessions.lock().await;
-    
+
     if let Some(_session) = sessions.remove(&session_id) {
         // 会话会在 drop 时自动清理
     }
-    
+
     Ok(())
+}
+
+// 全局数据库实例
+static DATABASE: OnceLock<Mutex<Option<Database>>> = OnceLock::new();
+
+async fn get_db() -> Result<&'static Mutex<Option<Database>>, String> {
+    let db_mutex = DATABASE.get_or_init(|| Mutex::new(None));
+    let mut db_guard = db_mutex.lock().await;
+    if db_guard.is_none() {
+        let db = Database::new().await.map_err(|e| e.to_string())?;
+        *db_guard = Some(db);
+    }
+    drop(db_guard);
+    Ok(db_mutex)
+}
+
+// 机器管理 Commands
+#[tauri::command]
+async fn list_machines() -> Result<Vec<Machine>, String> {
+    let db_mutex = get_db().await?;
+    let db_guard = db_mutex.lock().await;
+    let db = db_guard.as_ref().ok_or("数据库未初始化")?;
+    db.list_machines().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn add_machine(input: MachineInput) -> Result<Machine, String> {
+    let db_mutex = get_db().await?;
+    let db_guard = db_mutex.lock().await;
+    let db = db_guard.as_ref().ok_or("数据库未初始化")?;
+    db.add_machine(input).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_machine(id: String, input: MachineInput) -> Result<Machine, String> {
+    let db_mutex = get_db().await?;
+    let db_guard = db_mutex.lock().await;
+    let db = db_guard.as_ref().ok_or("数据库未初始化")?;
+    db.update_machine(&id, input)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_machine(id: String) -> Result<(), String> {
+    let db_mutex = get_db().await?;
+    let db_guard = db_mutex.lock().await;
+    let db = db_guard.as_ref().ok_or("数据库未初始化")?;
+    db.delete_machine(&id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn test_connection(
+    host: String,
+    port: u16,
+    username: String,
+    password: Option<String>,
+    private_key: Option<String>,
+) -> Result<bool, String> {
+    info!("测试连接: {}:{}", host, port);
+
+    let config = russh::client::Config {
+        inactivity_timeout: Some(std::time::Duration::from_secs(10)),
+        ..Default::default()
+    };
+    let config = Arc::new(config);
+
+    let (tx, _rx) = mpsc::channel::<Vec<u8>>(16);
+    let client = SSHClient::new(tx);
+
+    let mut handle = match russh::client::connect(config, (host.as_str(), port), client).await {
+        Ok(h) => h,
+        Err(e) => return Err(format!("连接失败: {}", e)),
+    };
+
+    let authenticated = if let Some(key_path) = private_key {
+        let key_pair = russh::keys::load_secret_key(key_path, None).map_err(|e| e.to_string())?;
+        let key_with_hash = russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key_pair), None);
+        handle
+            .authenticate_publickey(&username, key_with_hash)
+            .await
+            .is_ok()
+    } else if let Some(pass) = password {
+        handle.authenticate_password(&username, pass).await.is_ok()
+    } else {
+        false
+    };
+
+    let _ = handle.disconnect(Disconnect::ByApplication, "", "").await;
+
+    Ok(authenticated)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
-    
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
@@ -254,7 +373,12 @@ pub fn run() {
             connect_ssh,
             write_to_pty,
             resize_pty,
-            disconnect_ssh
+            disconnect_ssh,
+            list_machines,
+            add_machine,
+            update_machine,
+            delete_machine,
+            test_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
