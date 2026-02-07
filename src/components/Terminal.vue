@@ -101,7 +101,7 @@ onMounted(async () => {
   // 监听 SSH 数据事件
   const eventName = `ssh-data-${props.sessionId}`;
   console.log("Listening for event:", eventName);
-  
+
   unlistenFn = await listen<string>(eventName, (event) => {
     console.log("Received SSH data, length:", event.payload.length);
     const decoded = base64Decode(event.payload);
@@ -109,6 +109,16 @@ onMounted(async () => {
       terminal.value.write(decoded);
     }
   });
+
+  // 延迟发送回车，刷新 shell 提示符（shell 欢迎信息可能在监听器启动前发送）
+  setTimeout(() => {
+    if (props.sessionId && props.sessionId !== "default-session") {
+      invoke("write_to_pty", {
+        sessionId: props.sessionId,
+        data: "\n",
+      }).catch(console.error);
+    }
+  }, 500);
 
   // 监听窗口大小变化
   const resizeObserver = new ResizeObserver(() => {
@@ -138,7 +148,7 @@ watch(
       }
       // 清空终端
       terminal.value?.clear();
-      
+
       // 监听新的事件
       const eventName = `ssh-data-${newId}`;
       console.log("Switching to new event:", eventName);
@@ -182,5 +192,22 @@ watch(
 
 :deep(.xterm-viewport) {
   background-color: #1e1e1e !important;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar) {
+  width: 8px;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar-thumb) {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+:deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+  background-color: rgba(255, 255, 255, 0.25);
 }
 </style>

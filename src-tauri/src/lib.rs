@@ -2,7 +2,6 @@ use anyhow::Result;
 use log::info;
 use russh::client::Handle;
 use russh::keys::PublicKey;
-use russh::CryptoVec;
 use russh::{ChannelId, Disconnect};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,7 +16,7 @@ use db::{Database, Machine, MachineInput};
 // SSH 会话管理
 pub struct SSHSession {
     handle: Handle<SSHClient>,
-    channel_id: ChannelId,
+    channel: russh::Channel<russh::client::Msg>,
 }
 
 impl SSHSession {
@@ -70,7 +69,7 @@ impl SSHSession {
 
         // 打开通道
         info!("打开 SSH 通道...");
-        let channel = handle.channel_open_session().await?;
+        let mut channel = handle.channel_open_session().await?;
         channel
             .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
             .await?;
@@ -93,13 +92,12 @@ impl SSHSession {
             info!("数据转发任务结束");
         });
 
-        Ok(SSHSession { handle, channel_id })
+        Ok(SSHSession { handle, channel })
     }
 
     pub async fn write(&self, data: &[u8]) -> Result<()> {
-        let crypto_vec = CryptoVec::from_slice(data);
-        self.handle
-            .data(self.channel_id, crypto_vec)
+        self.channel
+            .data(data)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to write data: {:?}", e))?;
         Ok(())
@@ -107,6 +105,7 @@ impl SSHSession {
 
     pub async fn resize(&self, cols: u32, rows: u32) -> Result<()> {
         log::debug!("Resize requested: {}x{}", cols, rows);
+        let _ = self.channel.window_change(cols, rows, 0, 0).await;
         Ok(())
     }
 
