@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import Terminal from "./Terminal.vue";
 import DesktopWallpaper from "./desktop/DesktopWallpaper.vue";
 import DesktopIcons from "./desktop/DesktopIcons.vue";
@@ -63,6 +64,14 @@ const appTitles: Record<AppId, string> = {
 const openApps = ref<AppId[]>([]);
 const focusedApp = ref<AppId | null>(null);
 const desktopIconsRef = ref<InstanceType<typeof DesktopIcons> | null>(null);
+let unlistenProxyError: UnlistenFn | null = null;
+
+type BrowserProxyError = {
+  sessionId: string;
+  host: string;
+  port: number;
+  message: string;
+};
 
 function formatInvokeError(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -124,6 +133,20 @@ function clearDesktopSelection() {
 }
 
 const connectionStatus = computed(() => (isConnected.value ? "已连接" : "未连接"));
+
+onMounted(async () => {
+  unlistenProxyError = await listen<BrowserProxyError>("browser-proxy-error", (event) => {
+    if (event.payload.sessionId !== sessionId.value) return;
+    browserError.value = `${event.payload.message} (${event.payload.host}:${event.payload.port})`;
+  });
+});
+
+onUnmounted(() => {
+  if (unlistenProxyError) {
+    unlistenProxyError();
+    unlistenProxyError = null;
+  }
+});
 </script>
 
 <template>

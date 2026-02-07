@@ -1,12 +1,4 @@
 ---
-description: 
-alwaysApply: true
-enabled: true
-updatedAt: 2026-02-07T03:12:19.983Z
-provider: 
----
-
----
 trigger: always_on
 ---
 
@@ -36,8 +28,9 @@ trigger: always_on
 - 使用 `defineEmits` 定义事件
 
 ### CSS 样式
-- 优先使用 TailwindCSS v4 
-- 图标使用 Iconify
+- 优先使用 TailwindCSS 工具类
+- 组件级样式使用 `<style scoped>`
+- 图标使用 Iconify：`<span class="iconify mdi--icon-name"></span>`
 
 ### Rust 后端
 - Tauri commands 使用 `#[tauri::command]` 宏
@@ -83,7 +76,3 @@ pnpm tauri build
 
 ### 技能使用
 - 如有合适的技能，并遵循其指导
-
-### 注释规范
-- 代码注释使用中文
-- 注释内容简洁明了，避免过度冗余

@@ -5,7 +5,7 @@ use russh::keys::PublicKey;
 use russh::{ChannelId, Disconnect};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::process::Command;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -23,16 +23,21 @@ pub struct SSHSession {
     channel: russh::Channel<russh::client::Msg>,
     #[allow(dead_code)]
     shell_channel_id: Arc<Mutex<Option<ChannelId>>>,
-    socks_proxy: Option<SocksProxy>,
+    http_proxy: Option<HttpProxy>,
 }
 
-struct SocksProxy {
+struct HttpProxy {
     port: u16,
     shutdown: watch::Sender<bool>,
 }
 
-impl SocksProxy {
-    async fn start(handle: Arc<Mutex<Handle<SSHClient>>>) -> Result<Self> {
+
+impl HttpProxy {
+    async fn start(
+        handle: Arc<Mutex<Handle<SSHClient>>>,
+        app: tauri::AppHandle,
+        session_id: String,
+    ) -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
         let port = listener.local_addr()?.port();
         let (shutdown, mut shutdown_rx) = watch::channel(false);
@@ -47,14 +52,24 @@ impl SocksProxy {
                         match accept {
                             Ok((stream, originator)) => {
                                 let handle = handle.clone();
+                                let app = app.clone();
+                                let session_id = session_id.clone();
                                 tokio::spawn(async move {
-                                    if let Err(err) = handle_socks_client(stream, originator, handle).await {
-                                        log::warn!("SOCKS client error: {err}");
+                                    if let Err(err) = handle_http_client(
+                                        stream,
+                                        originator,
+                                        handle,
+                                        app,
+                                        session_id,
+                                    )
+                                    .await
+                                    {
+                                        log::debug!("HTTP client error: {err}");
                                     }
                                 });
                             }
                             Err(err) => {
-                                log::warn!("SOCKS accept error: {err}");
+                                log::warn!("HTTP accept error: {err}");
                                 break;
                             }
                         }
@@ -67,7 +82,7 @@ impl SocksProxy {
     }
 }
 
-impl Drop for SocksProxy {
+impl Drop for HttpProxy {
     fn drop(&mut self) {
         let _ = self.shutdown.send(true);
     }
@@ -142,6 +157,15 @@ pub struct SystemStats {
 #[serde(rename_all = "camelCase")]
 struct BrowserLaunchOptions {
     profile_mode: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct BrowserProxyError {
+    session_id: String,
+    host: String,
+    port: u16,
+    message: String,
 }
 
 impl SSHSession {
@@ -225,7 +249,7 @@ impl SSHSession {
             handle: Arc::new(Mutex::new(handle)),
             channel,
             shell_channel_id,
-            socks_proxy: None,
+            http_proxy: None,
         })
     }
 
@@ -293,14 +317,18 @@ impl SSHSession {
         Ok(())
     }
 
-    pub async fn ensure_socks_proxy(&mut self) -> Result<u16> {
-        if let Some(proxy) = &self.socks_proxy {
+    pub async fn ensure_http_proxy(
+        &mut self,
+        app: tauri::AppHandle,
+        session_id: String,
+    ) -> Result<u16> {
+        if let Some(proxy) = &self.http_proxy {
             return Ok(proxy.port);
         }
 
-        let proxy = SocksProxy::start(self.handle.clone()).await?;
+        let proxy = HttpProxy::start(self.handle.clone(), app, session_id).await?;
         let port = proxy.port;
-        self.socks_proxy = Some(proxy);
+        self.http_proxy = Some(proxy);
         Ok(port)
     }
 }
@@ -450,74 +478,73 @@ fn chrome_profile_dir(session_id: &str, profile_mode: &str) -> Result<std::path:
     Ok(dir)
 }
 
-async fn handle_socks_client(
+async fn handle_http_client(
     mut stream: TcpStream,
     originator: SocketAddr,
     handle: Arc<Mutex<Handle<SSHClient>>>,
+    app: tauri::AppHandle,
+    session_id: String,
 ) -> Result<()> {
-    // SOCKS5 handshake
-    let mut header = [0u8; 2];
-    stream.read_exact(&mut header).await?;
-    if header[0] != 0x05 {
-        return Err(anyhow::anyhow!("Unsupported SOCKS version"));
+    // 读取完整的 HTTP 请求头部（直到空行）
+    let mut request = Vec::new();
+    let mut buf = [0u8; 1];
+
+    // 读取请求行和头部
+    loop {
+        stream.read_exact(&mut buf).await?;
+        request.push(buf[0]);
+
+        // 检查是否到达头部结束标记 \r\n\r\n
+        if request.len() >= 4 {
+            if request.ends_with(&[b'\r', b'\n', b'\r', b'\n']) {
+                break;
+            }
+        }
     }
 
-    let methods_len = header[1] as usize;
-    let mut methods = vec![0u8; methods_len];
-    stream.read_exact(&mut methods).await?;
-    if !methods.iter().any(|m| *m == 0x00) {
-        stream.write_all(&[0x05, 0xFF]).await?;
-        return Err(anyhow::anyhow!("No supported auth method"));
-    }
-    stream.write_all(&[0x05, 0x00]).await?;
+    // 解析 CONNECT 请求
+    let request_str = String::from_utf8_lossy(&request);
+    let lines: Vec<&str> = request_str.lines().collect();
 
-    // SOCKS5 request
-    let mut req = [0u8; 4];
-    stream.read_exact(&mut req).await?;
-    if req[0] != 0x05 {
-        return Err(anyhow::anyhow!("Invalid request version"));
-    }
-    if req[1] != 0x01 {
-        // Only CONNECT supported
-        stream
-            .write_all(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-            .await?;
-        return Err(anyhow::anyhow!("Unsupported command"));
+    if lines.is_empty() {
+        return Err(anyhow::anyhow!("Empty request"));
     }
 
-    let atyp = req[3];
-    let host = match atyp {
-        0x01 => {
-            let mut addr = [0u8; 4];
-            stream.read_exact(&mut addr).await?;
-            Ipv4Addr::from(addr).to_string()
-        }
-        0x03 => {
-            let mut len = [0u8; 1];
-            stream.read_exact(&mut len).await?;
-            let mut domain = vec![0u8; len[0] as usize];
-            stream.read_exact(&mut domain).await?;
-            String::from_utf8(domain)?
-        }
-        0x04 => {
-            let mut addr = [0u8; 16];
-            stream.read_exact(&mut addr).await?;
-            Ipv6Addr::from(addr).to_string()
-        }
-        _ => {
-            return Err(anyhow::anyhow!("Unsupported address type"));
-        }
+    let first_line = lines[0];
+    let parts: Vec<&str> = first_line.split_whitespace().collect();
+
+    if parts.is_empty() || parts[0] != "CONNECT" {
+        let response = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        stream.write_all(response.as_bytes()).await?;
+        return Err(anyhow::anyhow!("Invalid HTTP CONNECT request: {}", first_line));
+    }
+
+    if parts.len() < 2 {
+        let response = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        stream.write_all(response.as_bytes()).await?;
+        return Err(anyhow::anyhow!("Missing target host:port"));
+    }
+
+    // 解析 host:port
+    let target = parts[1];
+    let (host, port_str) = match target.split_once(':') {
+        Some((h, p)) => (h, p),
+        None => (target, "443"),
     };
 
-    let mut port_buf = [0u8; 2];
-    stream.read_exact(&mut port_buf).await?;
-    let port = u16::from_be_bytes(port_buf);
+    let port = match port_str.parse::<u16>() {
+        Ok(p) => p,
+        Err(_) => 443,
+    };
 
+    log::debug!("HTTP CONNECT: {}:{} from {}", host, port, originator);
+
+    // 通过 SSH 隧道建立连接
     let mut channel = match {
         let handle = handle.lock().await;
         handle
             .channel_open_direct_tcpip(
-                host.clone(),
+                host,
                 port.into(),
                 originator.ip().to_string(),
                 originator.port().into(),
@@ -526,18 +553,39 @@ async fn handle_socks_client(
     } {
         Ok(channel) => channel,
         Err(err) => {
-            stream
-                .write_all(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-                .await?;
+            log::error!("Failed to open SSH channel to {}: {}: {}", host, port, err);
+            let response = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
+            stream.write_all(response.as_bytes()).await?;
+            let event = BrowserProxyError {
+                session_id,
+                host: host.to_string(),
+                port,
+                message: format!("连接远端目标失败：{err}"),
+            };
+            let _ = app.emit("browser-proxy-error", event);
             return Err(anyhow::anyhow!("Open channel failed: {err}"));
         }
     };
 
-    stream
-        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-        .await?;
+    // 发送成功响应
+    let response = "HTTP/1.1 200 Connection Established\r\nProxy-Agent: SynapSH/1.0\r\n\r\n";
+    if let Err(err) = stream.write_all(response.as_bytes()).await {
+        log::error!("Failed to send HTTP 200 response: {}", err);
+        return Err(err.into());
+    }
 
-    proxy_data(stream, &mut channel).await?;
+    // 开始双向数据转发
+    if let Err(err) = proxy_data(stream, &mut channel).await {
+        log::debug!("Proxy data transfer ended: {}", err);
+        let event = BrowserProxyError {
+            session_id,
+            host: host.to_string(),
+            port,
+            message: format!("传输中断：{err}"),
+        };
+        let _ = app.emit("browser-proxy-error", event);
+        return Err(err);
+    }
     Ok(())
 }
 
@@ -778,6 +826,7 @@ async fn browser_open(
     session_id: String,
     url: String,
     options: Option<BrowserLaunchOptions>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let target_url = normalize_url(&url)?;
     let host = target_url
@@ -810,14 +859,16 @@ async fn browser_open(
     }
 
     let proxy_port = session
-        .ensure_socks_proxy()
+        .ensure_http_proxy(app, session_id.clone())
         .await
-        .map_err(|e| format!("启动 SOCKS 代理失败：{e}"))?;
+        .map_err(|e| format!("启动 HTTP 代理失败：{e}"))?;
     drop(session);
 
-    let proxy_arg = format!("--proxy-server=socks5://127.0.0.1:{proxy_port}");
+    let proxy_arg = format!("--proxy-server=http://127.0.0.1:{proxy_port}");
     let profile_dir = chrome_profile_dir(&session_id, profile_mode)?;
     let profile_arg = format!("--user-data-dir={}", profile_dir.display());
+
+    log::info!("启动 Chrome，代理端口: {}, URL: {}", proxy_port, target_url);
 
     #[cfg(target_os = "macos")]
     {
@@ -828,6 +879,13 @@ async fn browser_open(
                 "--args",
                 &proxy_arg,
                 &profile_arg,
+                "--disable-quic",
+                "--disable-features=VizDisplayCompositor",
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-extensions",
+                "--disable-sync",
+                "--disable-translate",
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--new-window",
