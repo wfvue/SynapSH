@@ -1,285 +1,308 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from "vue";
+import { ref, computed, nextTick, onMounted, watch, onUnmounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 
-// 文件类型定义
-type FileType = "folder" | "text" | "image" | "code" | "archive" | "executable" | "unknown";
-
-interface FileItem {
-  id: string;
-  name: string;
-  type: FileType;
-  size: number;
-  modified: Date;
-  isSelected?: boolean;
+interface Props {
+  sessionId?: string;
+  initialPath?: string;
 }
 
-interface Tab {
-  id: string;
-  path: string;
-  title: string;
-}
-
-// 视图模式
-const viewMode = ref<"list" | "grid">("list");
-
-// 标签页
-const tabs = ref<Tab[]>([
-  { id: "1", path: "/home/user", title: "主目录" },
-]);
-const activeTabId = ref("1");
-
-// 当前路径
-const currentPath = ref("/home/user");
-
-// 导航历史
-const navigationHistory = ref<string[]>(["/home/user"]);
-const currentHistoryIndex = ref(0);
-
-// 侧边栏收藏
-const favorites = ref([
-  { id: "recent", name: "最近使用", icon: "icon-[mdi--clock-outline]" },
-  { id: "apps", name: "应用程序", icon: "icon-[mdi--apps]" },
-  { id: "desktop", name: "桌面", icon: "icon-[mdi--desktop-mac]" },
-  { id: "documents", name: "文稿", icon: "icon-[mdi--file-document-outline]" },
-  { id: "downloads", name: "下载", icon: "icon-[mdi--download]" },
-  { id: "pictures", name: "图片", icon: "icon-[mdi--image]" },
-  { id: "music", name: "音乐", icon: "icon-[mdi--music]" },
-  { id: "movies", name: "视频", icon: "icon-[mdi--movie]" },
-]);
-
-// 文件列表
-const files = ref<FileItem[]>([
-  { id: "1", name: "Applications", type: "folder", size: 0, modified: new Date("2026-02-07 10:00") },
-  { id: "2", name: "Desktop", type: "folder", size: 0, modified: new Date("2026-02-07 09:30") },
-  { id: "3", name: "Documents", type: "folder", size: 0, modified: new Date("2026-02-06 15:20") },
-  { id: "4", name: "Downloads", type: "folder", size: 0, modified: new Date("2026-02-07 18:10") },
-  { id: "5", name: "Pictures", type: "folder", size: 0, modified: new Date("2026-02-05 12:00") },
-  { id: "6", name: "config.yaml", type: "code", size: 2048, modified: new Date("2026-02-07 16:45") },
-  { id: "7", name: "deploy.sh", type: "executable", size: 12500, modified: new Date("2026-02-06 23:12") },
-  { id: "8", name: "report.log", type: "text", size: 4200000, modified: new Date("2026-02-06 21:05") },
-  { id: "9", name: "data.zip", type: "archive", size: 15400000, modified: new Date("2026-02-05 14:30") },
-  { id: "10", name: "avatar.png", type: "image", size: 256000, modified: new Date("2026-02-04 10:15") },
-]);
-
-// 预览面板
-const previewFile = ref<FileItem | null>(null);
-const isPreviewOpen = ref(false);
-
-// 上下文菜单
-const contextMenu = ref({
-  show: false,
-  x: 0,
-  y: 0,
-  fileId: null as string | null,
+const props = withDefaults(defineProps<Props>(), {
+  initialPath: "/root",
 });
 
-// 重命名状态
-const renamingFileId = ref<string | null>(null);
-const renamingValue = ref("");
-const renameInputRef = ref<HTMLInputElement | null>(null);
+// 定义事件
+const emit = defineEmits<{
+  (e: "open-file", filePath: string, fileName: string): void;
+}>();
 
-// 搜索
+// Types matching backend
+interface FileEntry {
+  name: string;
+  path: string;
+  type: "directory" | "file" | "symlink" | "unknown";
+  size: number;
+  modifiedTime?: string;
+  permissions?: string;
+  owner?: string;
+  group?: string;
+  isHidden?: boolean;
+}
+
+interface FileItem extends FileEntry {
+  id: string;
+  isSelected: boolean;
+  icon: string;
+}
+
+type SortField = "name" | "size" | "modifiedTime" | "type";
+type SortOrder = "asc" | "desc";
+
+// State
+const currentPath = ref(props.initialPath);
+const files = ref<FileItem[]>([]);
+const isLoading = ref(false);
+const error = ref<string | null>(null);
+const viewMode = ref<"grid" | "list">("list");
 const searchQuery = ref("");
-const isSearching = ref(false);
-
-// 选中文件
+const history = ref<string[]>([props.initialPath]);
+const historyIndex = ref(0);
 const selectedFiles = computed(() => files.value.filter(f => f.isSelected));
+const contextMenu = ref({ show: false, x: 0, y: 0, targetId: null as string | null });
+const isRenaming = ref<string | null>(null);
+const renameValue = ref("");
+const renameInputRef = ref<HTMLInputElement | null>(null);
+const sortField = ref<SortField>("name");
+const sortOrder = ref<SortOrder>("asc");
+const showHidden = ref(true);
+const showDetailsPanel = ref(false);
 
-// 格式化文件大小
+// Modals
+const showNewFileModal = ref(false);
+const newFileName = ref("");
+const showChmodModal = ref(false);
+const chmodValue = ref("");
+const chmodTargetFile = ref<FileItem | null>(null);
+
+const IGNORED_FILES = [".DS_Store", "Thumbs.db"];
+
+// Computed: Filtered and Sorted Files
+const displayedFiles = computed(() => {
+  let result = [...files.value];
+
+  // Filter hidden
+  if (!showHidden.value) {
+    result = result.filter(f => !f.isHidden);
+  }
+
+  // Filter by search
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase();
+    result = result.filter(f => f.name.toLowerCase().includes(q));
+  }
+
+  // Sort
+  result.sort((a, b) => {
+    // Folders always first
+    if (a.type === "directory" && b.type !== "directory") return -1;
+    if (a.type !== "directory" && b.type === "directory") return 1;
+
+    let cmp = 0;
+    switch (sortField.value) {
+      case "name":
+        cmp = a.name.localeCompare(b.name);
+        break;
+      case "size":
+        cmp = a.size - b.size;
+        break;
+      case "modifiedTime":
+        cmp = (a.modifiedTime || "").localeCompare(b.modifiedTime || "");
+        break;
+      case "type":
+        cmp = a.type.localeCompare(b.type);
+        break;
+    }
+    return sortOrder.value === "asc" ? cmp : -cmp;
+  });
+
+  return result;
+});
+
+// Helper: Get Icon
+function getFileIcon(file: FileEntry): string {
+  if (file.type === "directory") return "icon-[mdi--folder] text-blue-400";
+  if (file.type === "symlink") return "icon-[mdi--link-variant] text-cyan-400";
+
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const iconMap: Record<string, string> = {
+    // Images
+    png: "icon-[mdi--file-image] text-purple-400",
+    jpg: "icon-[mdi--file-image] text-purple-400",
+    jpeg: "icon-[mdi--file-image] text-purple-400",
+    gif: "icon-[mdi--file-image] text-purple-400",
+    svg: "icon-[mdi--file-image] text-purple-400",
+    webp: "icon-[mdi--file-image] text-purple-400",
+    // Code
+    js: "icon-[mdi--language-javascript] text-yellow-400",
+    ts: "icon-[mdi--language-typescript] text-blue-400",
+    vue: "icon-[mdi--vuejs] text-green-400",
+    json: "icon-[mdi--code-json] text-yellow-500",
+    html: "icon-[mdi--language-html5] text-orange-400",
+    css: "icon-[mdi--language-css3] text-blue-400",
+    rs: "icon-[mdi--language-rust] text-orange-300",
+    py: "icon-[mdi--language-python] text-blue-300",
+    go: "icon-[mdi--language-go] text-cyan-400",
+    sh: "icon-[mdi--bash] text-green-400",
+    // Archives
+    zip: "icon-[mdi--zip-box] text-orange-400",
+    tar: "icon-[mdi--zip-box] text-orange-400",
+    gz: "icon-[mdi--zip-box] text-orange-400",
+    "7z": "icon-[mdi--zip-box] text-orange-400",
+    rar: "icon-[mdi--zip-box] text-orange-400",
+    // Documents
+    pdf: "icon-[mdi--file-pdf-box] text-red-400",
+    doc: "icon-[mdi--microsoft-word] text-blue-500",
+    docx: "icon-[mdi--microsoft-word] text-blue-500",
+    xls: "icon-[mdi--microsoft-excel] text-green-500",
+    xlsx: "icon-[mdi--microsoft-excel] text-green-500",
+    txt: "icon-[mdi--file-document-outline] text-gray-400",
+    md: "icon-[mdi--language-markdown] text-gray-300",
+    log: "icon-[mdi--file-document-outline] text-gray-500",
+    // Config
+    yml: "icon-[mdi--file-cog] text-pink-400",
+    yaml: "icon-[mdi--file-cog] text-pink-400",
+    toml: "icon-[mdi--file-cog] text-orange-300",
+    conf: "icon-[mdi--file-cog] text-gray-400",
+    env: "icon-[mdi--file-cog] text-yellow-500",
+  };
+  return iconMap[ext || ""] || "icon-[mdi--file] text-gray-500";
+}
+
+// Formatters
 function formatSize(bytes: number): string {
-  if (bytes === 0) return "--";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let unitIndex = 0;
-  let size = bytes;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex++;
-  }
-  return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`;
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
-// 格式化日期
-function formatDate(date: Date): string {
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  
-  if (days === 0) {
-    return `今天 ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-  } else if (days === 1) {
-    return `昨天 ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-  } else {
-    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}`;
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "--";
+  try {
+    const date = new Date(dateStr);
+    return new Intl.DateTimeFormat('zh-CN', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }).format(date);
+  } catch {
+    return dateStr;
   }
 }
 
-// 获取文件图标
-function getFileIcon(type: FileType): string {
-  const icons: Record<FileType, string> = {
-    folder: "icon-[mdi--folder]",
-    text: "icon-[mdi--file-document-outline]",
-    image: "icon-[mdi--image]",
-    code: "icon-[mdi--code-json]",
-    archive: "icon-[mdi--zip-box]",
-    executable: "icon-[mdi--console]",
-    unknown: "icon-[mdi--file-outline]",
-  };
-  return icons[type] || icons.unknown;
+function formatPermissions(perms?: string): string {
+  if (!perms) return "---";
+  const mode = parseInt(perms, 8);
+  const r = (m: number) => ((m & 4) ? 'r' : '-') + ((m & 2) ? 'w' : '-') + ((m & 1) ? 'x' : '-');
+  return r((mode >> 6) & 7) + r((mode >> 3) & 7) + r(mode & 7);
 }
 
-// 获取文件颜色
-function getFileColor(type: FileType): string {
-  const colors: Record<FileType, string> = {
-    folder: "#60a5fa",
-    text: "#9ca3af",
-    image: "#a78bfa",
-    code: "#34d399",
-    archive: "#fbbf24",
-    executable: "#f87171",
-    unknown: "#9ca3af",
-  };
-  return colors[type] || colors.unknown;
+// Core: Fetch Files
+async function fetchFiles(path: string) {
+  if (!props.sessionId) {
+    error.value = "未连接到会话";
+    return;
+  }
+
+  isLoading.value = true;
+  error.value = null;
+
+  try {
+    const res = await invoke<{ entries: FileEntry[], path: string, parentPath?: string }>("list_files", {
+      sessionId: props.sessionId,
+      path: path
+    });
+
+    files.value = res.entries
+      .filter(e => !IGNORED_FILES.includes(e.name))
+      .map(e => ({
+        ...e,
+        id: e.path,
+        isSelected: false,
+        icon: getFileIcon(e)
+      }));
+  } catch (err: any) {
+    console.error("Failed to list files:", err);
+    error.value = err.toString();
+  } finally {
+    isLoading.value = false;
+  }
 }
 
-// 导航
-function navigateToPath(path: string) {
+// Navigation
+async function navigateTo(path: string) {
+  if (path === currentPath.value) return;
+
+  if (historyIndex.value < history.value.length - 1) {
+    history.value = history.value.slice(0, historyIndex.value + 1);
+  }
+  history.value.push(path);
+  historyIndex.value++;
+
   currentPath.value = path;
-  const tab = tabs.value.find(t => t.id === activeTabId.value);
-  if (tab) {
-    tab.path = path;
-    tab.title = path.split("/").pop() || "主目录";
-  }
-  if (currentHistoryIndex.value < navigationHistory.value.length - 1) {
-    navigationHistory.value = navigationHistory.value.slice(0, currentHistoryIndex.value + 1);
-  }
-  navigationHistory.value.push(path);
-  currentHistoryIndex.value++;
+  await fetchFiles(path);
 }
 
-function goBack() {
-  if (currentHistoryIndex.value > 0) {
-    currentHistoryIndex.value--;
-    currentPath.value = navigationHistory.value[currentHistoryIndex.value];
+async function goBack() {
+  if (historyIndex.value > 0) {
+    historyIndex.value--;
+    currentPath.value = history.value[historyIndex.value];
+    await fetchFiles(currentPath.value);
   }
 }
 
-function goForward() {
-  if (currentHistoryIndex.value < navigationHistory.value.length - 1) {
-    currentHistoryIndex.value++;
-    currentPath.value = navigationHistory.value[currentHistoryIndex.value];
+async function goForward() {
+  if (historyIndex.value < history.value.length - 1) {
+    historyIndex.value++;
+    currentPath.value = history.value[historyIndex.value];
+    await fetchFiles(currentPath.value);
   }
 }
 
-function goUp() {
-  const parts = currentPath.value.split("/").filter(Boolean);
-  if (parts.length > 0) {
-    parts.pop();
-    navigateToPath("/" + parts.join("/"));
-  }
+async function goUp() {
+  const parent = currentPath.value.split('/').slice(0, -1).join('/') || '/';
+  await navigateTo(parent);
 }
 
-// 标签页操作
-function addTab() {
-  const newId = (tabs.value.length + 1).toString();
-  tabs.value.push({ id: newId, path: currentPath.value, title: "新标签页" });
-  activeTabId.value = newId;
+async function refresh() {
+  await fetchFiles(currentPath.value);
 }
 
-function closeTab(tabId: string) {
-  if (tabs.value.length === 1) return;
-  const index = tabs.value.findIndex(t => t.id === tabId);
-  tabs.value = tabs.value.filter(t => t.id !== tabId);
-  if (activeTabId.value === tabId) {
-    const newIndex = Math.min(index, tabs.value.length - 1);
-    activeTabId.value = tabs.value[newIndex].id;
-  }
-}
-
-function switchTab(tabId: string) {
-  activeTabId.value = tabId;
-  const tab = tabs.value.find(t => t.id === tabId);
-  if (tab) {
-    currentPath.value = tab.path;
-  }
-}
-
-// 文件操作
-function selectFile(file: FileItem, event?: MouseEvent) {
-  if (event?.ctrlKey || event?.metaKey) {
+// Selection
+function selectFile(file: FileItem, event: MouseEvent) {
+  if (event.metaKey || event.ctrlKey) {
     file.isSelected = !file.isSelected;
-  } else if (event?.shiftKey && selectedFiles.value.length > 0) {
-    const lastSelected = files.value.findIndex(f => f.isSelected);
-    const currentIndex = files.value.findIndex(f => f.id === file.id);
-    const start = Math.min(lastSelected, currentIndex);
-    const end = Math.max(lastSelected, currentIndex);
-    files.value.forEach((f, i) => {
+  } else if (event.shiftKey && selectedFiles.value.length > 0) {
+    const lastIdx = displayedFiles.value.findIndex(f => f.isSelected);
+    const currIdx = displayedFiles.value.findIndex(f => f.id === file.id);
+    const [start, end] = lastIdx < currIdx ? [lastIdx, currIdx] : [currIdx, lastIdx];
+    displayedFiles.value.forEach((f, i) => {
       f.isSelected = i >= start && i <= end;
     });
   } else {
-    files.value.forEach(f => f.isSelected = f.id === file.id);
+    files.value.forEach(f => f.isSelected = false);
+    file.isSelected = true;
   }
 }
 
-function openFile(file: FileItem) {
-  if (file.type === "folder") {
-    navigateToPath(`${currentPath.value}/${file.name}`);
+function clearSelection() {
+  files.value.forEach(f => f.isSelected = false);
+}
+
+function selectAll() {
+  displayedFiles.value.forEach(f => f.isSelected = true);
+}
+
+async function openItem(file: FileItem) {
+  if (file.type === "directory") {
+    await navigateTo(file.path);
   } else {
-    previewFile.value = file;
-    isPreviewOpen.value = true;
+    // 在编辑器中打开文件
+    emit("open-file", file.path, file.name);
   }
 }
 
-async function startRename(file: FileItem) {
-  renamingFileId.value = file.id;
-  renamingValue.value = file.name;
-  contextMenu.value.show = false;
-  await nextTick();
-  renameInputRef.value?.focus();
-  renameInputRef.value?.select();
-}
-
-function confirmRename() {
-  if (renamingFileId.value && renamingValue.value.trim()) {
-    const file = files.value.find(f => f.id === renamingFileId.value);
-    if (file) {
-      file.name = renamingValue.value.trim();
-    }
-  }
-  renamingFileId.value = null;
-  renamingValue.value = "";
-}
-
-function cancelRename() {
-  renamingFileId.value = null;
-  renamingValue.value = "";
-}
-
-function deleteFile(fileId: string) {
-  files.value = files.value.filter(f => f.id !== fileId);
-  contextMenu.value.show = false;
-}
-
-function createNewFolder() {
-  const newId = Date.now().toString();
-  files.value.unshift({
-    id: newId,
-    name: "新建文件夹",
-    type: "folder",
-    size: 0,
-    modified: new Date(),
-    isSelected: true,
-  });
-  startRename(files.value[0]);
-}
-
-// 上下文菜单
-function showContextMenu(event: MouseEvent, file?: FileItem) {
+// Context Menu
+function onContextMenu(event: MouseEvent, file: FileItem | null) {
   event.preventDefault();
+  if (file && !file.isSelected) {
+    selectFile(file, event);
+  }
   contextMenu.value = {
     show: true,
-    x: event.clientX,
-    y: event.clientY,
-    fileId: file?.id || null,
+    x: Math.min(event.clientX, window.innerWidth - 200),
+    y: Math.min(event.clientY, window.innerHeight - 300),
+    targetId: file?.id || null
   };
 }
 
@@ -287,410 +310,772 @@ function hideContextMenu() {
   contextMenu.value.show = false;
 }
 
-// 键盘快捷键
-function handleKeydown(event: KeyboardEvent) {
-  if (renamingFileId.value) {
-    if (event.key === "Enter") confirmRename();
-    if (event.key === "Escape") cancelRename();
-    return;
-  }
-  
-  if (event.key === "Delete" && selectedFiles.value.length > 0) {
-    files.value = files.value.filter(f => !f.isSelected);
-  }
-  if (event.key === "Enter" && selectedFiles.value.length === 1) {
-    openFile(selectedFiles.value[0]);
+function copyPath(file: FileItem) {
+  hideContextMenu();
+  window.navigator.clipboard.writeText(file.path);
+}
+
+// File Operations
+async function createFolder() {
+  if (!props.sessionId) return;
+  hideContextMenu();
+  try {
+    const name = "新建文件夹";
+    const path = `${currentPath.value}/${name}`;
+    await invoke("create_folder", { sessionId: props.sessionId, path });
+    await fetchFiles(currentPath.value);
+    // Auto start rename
+    const newFolder = files.value.find(f => f.name === name);
+    if (newFolder) {
+      await nextTick();
+      startRename(newFolder);
+    }
+  } catch (err: any) {
+    error.value = "创建文件夹失败: " + err;
   }
 }
+
+async function createFile() {
+  if (!props.sessionId || !newFileName.value.trim()) return;
+  try {
+    const path = `${currentPath.value}/${newFileName.value.trim()}`;
+    await invoke("create_file", { sessionId: props.sessionId, path, content: null });
+    await fetchFiles(currentPath.value);
+    showNewFileModal.value = false;
+    newFileName.value = "";
+  } catch (err: any) {
+    error.value = "创建文件失败: " + err;
+  }
+}
+
+async function startRename(file: FileItem) {
+  hideContextMenu();
+  isRenaming.value = file.id;
+  renameValue.value = file.name;
+  await nextTick();
+  renameInputRef.value?.focus();
+  renameInputRef.value?.select();
+}
+
+async function finishRename(file: FileItem) {
+  if (!isRenaming.value || !renameValue.value.trim() || renameValue.value === file.name) {
+    isRenaming.value = null;
+    return;
+  }
+
+  try {
+    const oldPath = file.path;
+    const newPath = `${currentPath.value}/${renameValue.value.trim()}`;
+    await invoke("rename_file", {
+      sessionId: props.sessionId,
+      oldPath,
+      newPath
+    });
+    await fetchFiles(currentPath.value);
+  } catch (err: any) {
+    error.value = "重命名失败: " + err;
+  } finally {
+    isRenaming.value = null;
+  }
+}
+
+async function deleteSelected() {
+  if (!props.sessionId || selectedFiles.value.length === 0) return;
+  hideContextMenu();
+
+  if (!confirm(`确定删除 ${selectedFiles.value.length} 个项目吗？此操作不可恢复！`)) return;
+
+  try {
+    for (const file of selectedFiles.value) {
+      await invoke("delete_file_or_folder", {
+        sessionId: props.sessionId,
+        path: file.path,
+        isDirectory: file.type === "directory"
+      });
+    }
+    await fetchFiles(currentPath.value);
+  } catch (err: any) {
+    error.value = "删除失败: " + err;
+  }
+}
+
+function openChmodModal(file: FileItem) {
+  hideContextMenu();
+  chmodTargetFile.value = file;
+  chmodValue.value = file.permissions || "644";
+  showChmodModal.value = true;
+}
+
+async function applyChmod() {
+  if (!props.sessionId || !chmodTargetFile.value || !chmodValue.value.trim()) return;
+
+  try {
+    const mode = parseInt(chmodValue.value, 8);
+    if (isNaN(mode) || mode < 0 || mode > 0o777) {
+      error.value = "无效的权限值";
+      return;
+    }
+    await invoke("chmod_file", {
+      sessionId: props.sessionId,
+      path: chmodTargetFile.value.path,
+      mode
+    });
+    await fetchFiles(currentPath.value);
+    showChmodModal.value = false;
+  } catch (err: any) {
+    error.value = "修改权限失败: " + err;
+  }
+}
+
+async function downloadFile(file: FileItem) {
+  if (!props.sessionId || file.type === "directory") return;
+  hideContextMenu();
+
+  try {
+    const base64Content = await invoke<string>("download_file", {
+      sessionId: props.sessionId,
+      remotePath: file.path
+    });
+
+    // Decode and trigger download
+    const binaryString = atob(base64Content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err: any) {
+    error.value = "下载失败: " + err;
+  }
+}
+
+// Keyboard Shortcuts
+function handleKeydown(event: KeyboardEvent) {
+  if (showNewFileModal.value || showChmodModal.value || isRenaming.value) return;
+
+  if ((event.metaKey || event.ctrlKey) && event.key === "a") {
+    event.preventDefault();
+    selectAll();
+  }
+  if (event.key === "Delete" || event.key === "Backspace") {
+    if (selectedFiles.value.length > 0) {
+      deleteSelected();
+    }
+  }
+  if (event.key === "F2" && selectedFiles.value.length === 1) {
+    startRename(selectedFiles.value[0]);
+  }
+  if (event.key === "Enter" && selectedFiles.value.length === 1) {
+    openItem(selectedFiles.value[0]);
+  }
+  if (event.key === "Escape") {
+    clearSelection();
+    hideContextMenu();
+  }
+}
+
+// Sorting
+function toggleSort(field: SortField) {
+  if (sortField.value === field) {
+    sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
+  } else {
+    sortField.value = field;
+    sortOrder.value = "asc";
+  }
+}
+
+// Watchers
+watch(() => props.sessionId, (newVal) => {
+  if (newVal) fetchFiles(currentPath.value);
+}, { immediate: true });
+
+onMounted(() => {
+  document.addEventListener('click', hideContextMenu);
+  document.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', hideContextMenu);
+  document.removeEventListener('keydown', handleKeydown);
+});
+
+// Details panel
+const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFiles.value[0] : null);
 </script>
 
 <template>
-  <div 
-    class="h-full flex flex-col bg-neutral-900/85 backdrop-blur-xl text-neutral-200 relative overflow-hidden"
-    @click="hideContextMenu"
-    @keydown="handleKeydown"
-    tabindex="0"
-  >
-    <!-- 标签页栏 -->
-    <div class="bg-neutral-800/60 border-b border-white/[0.06] pt-2 px-3 flex items-end">
-      <div class="flex gap-1 flex-1 overflow-x-auto">
-        <div
-          v-for="tab in tabs"
-          :key="tab.id"
-          class="flex items-center gap-1.5 px-3.5 py-2 bg-neutral-700/40 rounded-t-lg cursor-pointer transition-all min-w-[120px] max-w-[200px] border border-transparent border-b-0"
-          :class="activeTabId === tab.id ? 'bg-neutral-700/90 border-white/10' : 'hover:bg-neutral-700/50'"
-          @click="switchTab(tab.id)"
-        >
-          <span class="icon-[mdi--folder-outline] text-sm text-blue-400"></span>
-          <span class="flex-1 text-[13px] truncate">{{ tab.title }}</span>
-          <button
-            v-if="tabs.length > 1"
-            class="w-4 h-4 rounded flex items-center justify-center text-xs text-neutral-500 opacity-0 hover:opacity-100 hover:bg-red-500/30 hover:text-white transition-all"
-            :class="{ 'opacity-100': activeTabId === tab.id }"
-            @click.stop="closeTab(tab.id)"
-          >
-            <span class="icon-[mdi--close]"></span>
-          </button>
-        </div>
-        <button 
-          class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-500 hover:bg-white/10 hover:text-white transition-all mb-1"
-          @click="addTab"
-        >
-          <span class="icon-[mdi--plus]"></span>
-        </button>
-      </div>
-    </div>
+  <div class="files-app" tabindex="0">
 
-    <!-- 工具栏 -->
-    <div class="flex items-center gap-3 px-4 py-2.5 bg-neutral-800/50 border-b border-white/[0.06]">
-      <!-- 导航按钮 -->
-      <div class="flex gap-1.5">
+    <!-- Header / Toolbar -->
+    <header
+      class="flex items-center gap-3 px-4 py-2.5 bg-neutral-800/60 border-b border-neutral-700/50 backdrop-blur-md z-10">
+      <!-- Nav Controls -->
+      <div class="flex items-center gap-0.5">
         <button
-          class="w-7 h-7 rounded-lg bg-white/[0.06] text-neutral-300 flex items-center justify-center text-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/[0.12] hover:text-white"
-          :disabled="currentHistoryIndex === 0"
-          @click="goBack"
-        >
+          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-30 transition text-xl"
+          :disabled="historyIndex <= 0" @click="goBack" title="后退">
           <span class="icon-[mdi--chevron-left]"></span>
         </button>
         <button
-          class="w-7 h-7 rounded-lg bg-white/[0.06] text-neutral-300 flex items-center justify-center text-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/[0.12] hover:text-white"
-          :disabled="currentHistoryIndex === navigationHistory.length - 1"
-          @click="goForward"
-        >
+          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-30 transition text-xl"
+          :disabled="historyIndex >= history.length - 1" @click="goForward" title="前进">
           <span class="icon-[mdi--chevron-right]"></span>
         </button>
-        <button 
-          class="w-7 h-7 rounded-lg bg-white/[0.06] text-neutral-300 flex items-center justify-center text-lg transition-all hover:bg-white/[0.12] hover:text-white"
-          @click="goUp"
-        >
+        <button class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl"
+          @click="goUp" title="上级目录">
           <span class="icon-[mdi--arrow-up]"></span>
         </button>
+        <button class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl"
+          @click="refresh" title="刷新">
+          <span class="icon-[mdi--refresh]" :class="{ 'animate-spin': isLoading }"></span>
+        </button>
       </div>
 
-      <!-- 路径栏 -->
-      <div class="flex-1 flex items-center">
-        <div class="flex items-center gap-1 bg-white/5 px-3 py-1.5 rounded-lg text-[13px]">
-          <button class="bg-transparent border-none text-neutral-400 hover:text-white hover:bg-white/10 px-1.5 py-0.5 rounded transition-all">电脑</button>
-          <span class="icon-[mdi--chevron-right] text-sm text-neutral-600"></span>
-          <button class="bg-transparent border-none text-neutral-400 hover:text-white hover:bg-white/10 px-1.5 py-0.5 rounded transition-all">Mac OS</button>
-          <span class="icon-[mdi--chevron-right] text-sm text-neutral-600"></span>
-          <span class="text-white font-medium">{{ currentPath.split('/').pop() || '主目录' }}</span>
-        </div>
+      <div class="w-px h-5 bg-neutral-700"></div>
+
+      <!-- Path Bar -->
+      <div
+        class="flex-1 flex bg-black/30 rounded-lg px-3 py-1.5 border border-white/5 items-center gap-2 overflow-hidden focus-within:ring-1 ring-blue-500/50">
+        <span class="icon-[mdi--folder-home] text-neutral-500 text-base"></span>
+        <input v-model="currentPath" @keyup.enter="navigateTo(currentPath)"
+          class="bg-transparent border-none outline-none w-full text-sm text-neutral-300 placeholder-neutral-600 font-mono" />
       </div>
 
-      <!-- 工具按钮 -->
-      <div class="flex items-center gap-2.5">
-        <!-- 搜索框 -->
-        <div 
-          class="flex items-center gap-2 bg-white/[0.06] border border-transparent rounded-lg px-3 py-1.5 transition-all"
-          :class="isSearching ? 'bg-white/10 border-sky-400/40 w-60' : 'w-44'"
-        >
-          <span class="icon-[mdi--magnify] text-base text-neutral-500"></span>
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索"
-            class="bg-transparent border-none text-white text-[13px] outline-none w-full"
-            @focus="isSearching = true"
-            @blur="isSearching = false"
-          />
-          <button 
-            v-if="searchQuery" 
-            class="bg-transparent border-none text-neutral-500 text-sm"
-            @click="searchQuery = ''"
-          >
-            <span class="icon-[mdi--close-circle]"></span>
-          </button>
-        </div>
+      <!-- Search -->
+      <div class="relative w-40">
+        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 icon-[mdi--magnify] text-neutral-500 text-base"></span>
+        <input v-model="searchQuery" placeholder="搜索"
+          class="w-full bg-black/30 border border-white/5 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:bg-black/50 focus:border-white/10 transition-all placeholder-neutral-600" />
+      </div>
 
-        <!-- 视图切换 -->
-        <div class="flex bg-white/[0.06] rounded-lg p-0.5 gap-0.5">
-          <button
-            class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-400 transition-all hover:text-neutral-300"
-            :class="viewMode === 'list' ? 'bg-white/[0.12] text-white' : ''"
-            @click="viewMode = 'list'"
-          >
-            <span class="icon-[mdi--view-list]"></span>
-          </button>
-          <button
-            class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-400 transition-all hover:text-neutral-300"
-            :class="viewMode === 'grid' ? 'bg-white/[0.12] text-white' : ''"
-            @click="viewMode = 'grid'"
-          >
-            <span class="icon-[mdi--view-grid]"></span>
-          </button>
-        </div>
+      <div class="w-px h-5 bg-neutral-700"></div>
 
-        <button 
-          class="w-8 h-8 rounded-lg bg-white/[0.06] text-neutral-300 flex items-center justify-center text-lg transition-all hover:bg-white/[0.12] hover:text-white"
-          @click="createNewFolder"
-        >
+      <!-- Actions -->
+      <div class="flex items-center gap-1">
+        <button @click="showNewFileModal = true"
+          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl" title="新建文件">
+          <span class="icon-[mdi--file-plus]"></span>
+        </button>
+        <button @click="createFolder"
+          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl" title="新建文件夹">
           <span class="icon-[mdi--folder-plus]"></span>
         </button>
+      </div>
 
-        <button 
-          class="w-8 h-8 rounded-lg bg-white/[0.06] text-neutral-300 flex items-center justify-center text-lg transition-all hover:bg-white/[0.12] hover:text-white"
-          @click="showContextMenu"
-        >
-          <span class="icon-[mdi--dots-vertical]"></span>
+      <div class="w-px h-5 bg-neutral-700"></div>
+
+      <!-- View Toggle -->
+      <div class="flex bg-black/30 rounded-lg p-0.5 gap-0.5 border border-white/5">
+        <button @click="viewMode = 'list'"
+          :class="['p-1.5 rounded-md transition text-lg', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300']"
+          title="列表视图">
+          <span class="icon-[mdi--view-list]"></span>
+        </button>
+        <button @click="viewMode = 'grid'"
+          :class="['p-1.5 rounded-md transition text-lg', viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300']"
+          title="网格视图">
+          <span class="icon-[mdi--view-grid]"></span>
         </button>
       </div>
-    </div>
 
-    <!-- 主内容区 -->
-    <div class="flex-1 flex overflow-hidden">
-      <!-- 侧边栏 -->
-      <aside class="w-[200px] bg-neutral-800/50 border-r border-white/[0.06] py-4 px-3 overflow-y-auto">
-        <div class="mb-5">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2 px-2">收藏</h3>
-          <nav class="flex flex-col gap-0.5">
-            <button
-              v-for="item in favorites"
-              :key="item.id"
-              class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-transparent border-none text-neutral-300 text-[13px] cursor-pointer transition-all text-left hover:bg-white/[0.08] hover:text-white"
-            >
-              <span :class="item.icon" class="text-lg w-5 text-center"></span>
-              <span>{{ item.name }}</span>
+      <button @click="showHidden = !showHidden"
+        :class="['p-1.5 rounded-lg transition text-xl', showHidden ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-500 hover:text-white hover:bg-white/10']"
+        title="显示隐藏文件">
+        <span class="icon-[mdi--eye]"></span>
+      </button>
+
+      <button @click="showDetailsPanel = !showDetailsPanel"
+        :class="['p-1.5 rounded-lg transition text-xl', showDetailsPanel ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-500 hover:text-white hover:bg-white/10']"
+        title="详情面板">
+        <span class="icon-[mdi--information-outline]"></span>
+      </button>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden">
+
+      <!-- Sidebar -->
+      <aside
+        class="w-52 bg-neutral-800/30 backdrop-blur-sm border-r border-neutral-700/30 flex flex-col py-3 gap-4 overflow-y-auto">
+        <div class="px-2">
+          <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest px-3 mb-1.5">收藏</div>
+          <div class="flex flex-col gap-0.5">
+            <button v-for="item in [
+              { path: '/root', icon: 'icon-[mdi--home]', name: '主目录' },
+              { path: '/tmp', icon: 'icon-[mdi--folder-clock]', name: '临时目录' },
+              { path: '/var/log', icon: 'icon-[mdi--file-document-outline]', name: '日志' },
+              { path: '/etc', icon: 'icon-[mdi--cog]', name: '配置' },
+            ]" :key="item.path" @click="navigateTo(item.path)"
+              :class="['flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition', currentPath === item.path ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-400 hover:bg-white/5 hover:text-white']">
+              <span :class="item.icon"></span>
+              {{ item.name }}
             </button>
-          </nav>
+          </div>
         </div>
-
-        <div class="mb-5">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2 px-2">位置</h3>
-          <nav class="flex flex-col gap-0.5">
-            <button class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-transparent border-none text-neutral-300 text-[13px] cursor-pointer transition-all text-left hover:bg-white/[0.08] hover:text-white">
-              <span class="icon-[mdi--harddisk] text-lg w-5 text-center"></span>
-              <span>Macintosh HD</span>
+        <div class="px-2">
+          <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest px-3 mb-1.5">系统</div>
+          <div class="flex flex-col gap-0.5">
+            <button @click="navigateTo('/')"
+              :class="['flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition', currentPath === '/' ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-400 hover:bg-white/5 hover:text-white']">
+              <span class="icon-[mdi--harddisk]"></span>
+              根目录
             </button>
-            <button class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-transparent border-none text-neutral-300 text-[13px] cursor-pointer transition-all text-left hover:bg-white/[0.08] hover:text-white">
-              <span class="icon-[mdi--server-network] text-lg w-5 text-center"></span>
-              <span>网络</span>
-            </button>
-          </nav>
-        </div>
-
-        <div class="mb-5">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2 px-2">标签</h3>
-          <nav class="flex flex-col gap-0.5">
-            <button class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-transparent border-none text-neutral-300 text-[13px] cursor-pointer transition-all text-left hover:bg-white/[0.08] hover:text-white">
-              <span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>
-              <span>重要</span>
-            </button>
-            <button class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-transparent border-none text-neutral-300 text-[13px] cursor-pointer transition-all text-left hover:bg-white/[0.08] hover:text-white">
-              <span class="w-2.5 h-2.5 rounded-full bg-teal-400"></span>
-              <span>工作</span>
-            </button>
-            <button class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-transparent border-none text-neutral-300 text-[13px] cursor-pointer transition-all text-left hover:bg-white/[0.08] hover:text-white">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-300"></span>
-              <span>个人</span>
-            </button>
-          </nav>
+          </div>
         </div>
       </aside>
 
-      <!-- 文件区域 -->
-      <section class="flex-1 overflow-auto p-4" @contextmenu="showContextMenu($event)">
-        <!-- 列表视图 -->
-        <div v-if="viewMode === 'list'" class="flex flex-col">
-          <div class="flex px-3 py-2 text-[11px] font-medium text-neutral-500 uppercase tracking-wider">
-            <div class="flex-1 flex items-center gap-1">
-              <span>名称</span>
-              <span class="icon-[mdi--chevron-down]"></span>
-            </div>
-            <div class="w-24">大小</div>
-            <div class="w-24">种类</div>
-            <div class="w-32">修改日期</div>
-          </div>
+      <!-- File Area -->
+      <main class="flex-1 relative overflow-y-auto" @click.self="clearSelection"
+        @contextmenu.self="onContextMenu($event, null)">
 
-          <div class="flex flex-col">
-            <div
-              v-for="file in files"
-              :key="file.id"
-              class="flex px-3 py-2.5 rounded-xl transition-all cursor-pointer"
-              :class="file.isSelected ? 'bg-sky-500/20' : 'hover:bg-white/[0.04]'"
-              @click="selectFile(file, $event)"
-              @dblclick="openFile(file)"
-              @contextmenu.stop="showContextMenu($event, file)"
-            >
-              <div class="flex-1 flex items-center gap-3">
-                <span
-                  class="text-xl"
-                  :class="getFileIcon(file.type)"
-                  :style="{ color: getFileColor(file.type) }"
-                ></span>
-                <div v-if="renamingFileId === file.id" class="flex-1">
-                  <input
-                    ref="renameInputRef"
-                    v-model="renamingValue"
-                    class="w-full bg-neutral-800 border border-sky-400/50 rounded px-2 py-1 text-white text-sm outline-none"
-                    @keyup.enter="confirmRename"
-                    @keyup.esc="cancelRename"
-                    @blur="confirmRename"
-                  />
-                </div>
-                <span v-else class="text-neutral-200 text-[13px]">{{ file.name }}</span>
-              </div>
-              <div class="w-24 text-neutral-400 text-[13px]">{{ formatSize(file.size) }}</div>
-              <div class="w-24 text-neutral-400 text-[13px] capitalize">{{ file.type }}</div>
-              <div class="w-32 text-neutral-400 text-[13px]">{{ formatDate(file.modified) }}</div>
-            </div>
-          </div>
+        <!-- Loading -->
+        <div v-if="isLoading"
+          class="absolute inset-0 flex items-center justify-center bg-neutral-900/60 z-20 backdrop-blur-sm">
+          <span class="icon-[mdi--loading] animate-spin text-4xl text-blue-500"></span>
         </div>
 
-        <!-- 网格视图 -->
-        <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-3">
-          <div
-            v-for="file in files"
-            :key="file.id"
-            class="flex flex-col items-center p-3 rounded-xl transition-all cursor-pointer gap-2"
-            :class="file.isSelected ? 'bg-sky-500/20' : 'hover:bg-white/[0.04]'"
-            @click="selectFile(file, $event)"
-            @dblclick="openFile(file)"
-            @contextmenu.stop="showContextMenu($event, file)"
-          >
-            <span
-              class="text-5xl"
-              :class="getFileIcon(file.type)"
-              :style="{ color: getFileColor(file.type) }"
-            ></span>
-            <div v-if="renamingFileId === file.id" class="w-full">
-              <input
-                ref="renameInputRef"
-                v-model="renamingValue"
-                class="w-full bg-neutral-800 border border-sky-400/50 rounded px-1.5 py-0.5 text-white text-xs text-center outline-none"
-                @keyup.enter="confirmRename"
-                @keyup.esc="cancelRename"
-                @blur="confirmRename"
-              />
-            </div>
-            <span v-else class="text-neutral-200 text-xs text-center truncate w-full">{{ file.name }}</span>
-            <span class="text-neutral-500 text-[10px]">{{ formatSize(file.size) }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- 预览面板 -->
-      <aside 
-        v-if="isPreviewOpen && previewFile" 
-        class="w-[280px] bg-neutral-800/50 border-l border-white/[0.06] p-5 flex flex-col"
-      >
-        <div class="flex justify-end mb-4">
-          <button 
-            class="w-7 h-7 rounded-lg bg-white/[0.06] text-neutral-400 flex items-center justify-center transition-all hover:bg-white/[0.12] hover:text-white"
-            @click="isPreviewOpen = false"
-          >
+        <!-- Error -->
+        <div v-if="error"
+          class="absolute inset-x-0 top-3 mx-auto w-max max-w-md bg-red-500/10 border border-red-500/50 text-red-200 px-4 py-2.5 rounded-lg flex items-center gap-3 shadow-xl backdrop-blur-md z-30">
+          <span class="icon-[mdi--alert-circle] text-red-400 text-lg"></span>
+          <span class="text-sm">{{ error }}</span>
+          <button @click="error = null" class="ml-auto hover:bg-red-500/20 rounded p-1">
             <span class="icon-[mdi--close]"></span>
           </button>
         </div>
-        <div class="flex flex-col items-center mb-6">
-          <span
-            class="text-[100px] mb-4"
-            :class="getFileIcon(previewFile.type)"
-            :style="{ color: getFileColor(previewFile.type) }"
-          ></span>
-          <h3 class="text-white text-lg font-medium mb-1">{{ previewFile.name }}</h3>
-          <p class="text-neutral-500 text-sm uppercase">{{ previewFile.type }}</p>
+
+        <!-- Empty -->
+        <div v-if="displayedFiles.length === 0 && !isLoading && !error"
+          class="h-full flex flex-col items-center justify-center text-neutral-600">
+          <span class="icon-[mdi--folder-open-outline] text-6xl mb-3 opacity-50"></span>
+          <p class="text-sm">文件夹为空</p>
         </div>
-        <div class="flex flex-col gap-3 text-[13px]">
-          <div class="flex justify-between py-2 border-b border-white/[0.06]">
-            <span class="text-neutral-500">大小</span>
-            <span class="text-neutral-300">{{ formatSize(previewFile.size) }}</span>
+
+        <!-- Content -->
+        <div v-else class="p-3 min-h-full">
+
+          <!-- List View -->
+          <div v-if="viewMode === 'list'" class="flex flex-col">
+            <!-- Header -->
+            <div
+              class="grid grid-cols-[24px_1fr_100px_80px_80px] gap-3 px-3 py-1.5 text-[10px] font-medium text-neutral-500 border-b border-white/5 uppercase tracking-wide sticky top-0 bg-neutral-900/90 backdrop-blur-sm z-10">
+              <span></span>
+              <button @click="toggleSort('name')" class="text-left flex items-center gap-1 hover:text-white transition">
+                名称
+                <span v-if="sortField === 'name'"
+                  :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
+                  class="text-xs"></span>
+              </button>
+              <button @click="toggleSort('modifiedTime')"
+                class="text-right flex items-center justify-end gap-1 hover:text-white transition">
+                修改时间
+                <span v-if="sortField === 'modifiedTime'"
+                  :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
+                  class="text-xs"></span>
+              </button>
+              <button @click="toggleSort('size')"
+                class="text-right flex items-center justify-end gap-1 hover:text-white transition">
+                大小
+                <span v-if="sortField === 'size'"
+                  :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
+                  class="text-xs"></span>
+              </button>
+              <span class="text-right">权限</span>
+            </div>
+            <!-- Rows -->
+            <div v-for="file in displayedFiles" :key="file.id"
+              class="grid grid-cols-[24px_1fr_100px_80px_80px] gap-3 items-center px-3 py-1.5 rounded-lg cursor-default transition-colors group border border-transparent"
+              :class="file.isSelected ? 'bg-blue-500/20 border-blue-500/30' : 'hover:bg-white/5 hover:border-white/5'"
+              @click.stop="selectFile(file, $event)" @dblclick="openItem(file)"
+              @contextmenu.prevent.stop="onContextMenu($event, file)">
+              <span :class="[file.icon, 'text-lg']"></span>
+
+              <div v-if="isRenaming === file.id" class="w-full">
+                <input ref="renameInputRef" v-model="renameValue" @blur="finishRename(file)"
+                  @keydown.enter="finishRename(file)" @keydown.esc="isRenaming = null"
+                  class="w-full max-w-[300px] bg-black/50 text-white text-sm border border-blue-500 rounded px-2 py-0.5 outline-none" />
+              </div>
+              <span v-else class="text-sm text-neutral-200 group-hover:text-white truncate"
+                :class="{ 'text-neutral-500': file.isHidden }">{{ file.name }}</span>
+
+              <span class="text-[11px] text-neutral-500 text-right tabular-nums">{{ formatDate(file.modifiedTime)
+              }}</span>
+              <span class="text-[11px] text-neutral-500 text-right tabular-nums">{{ file.type !== 'directory' ?
+                formatSize(file.size) : '--' }}</span>
+              <span class="text-[11px] text-neutral-500 text-right font-mono">{{ formatPermissions(file.permissions)
+              }}</span>
+            </div>
           </div>
-          <div class="flex justify-between py-2 border-b border-white/[0.06]">
-            <span class="text-neutral-500">修改</span>
-            <span class="text-neutral-300">{{ formatDate(previewFile.modified) }}</span>
+
+          <!-- Grid View -->
+          <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(90px,1fr))] gap-3">
+            <div v-for="file in displayedFiles" :key="file.id"
+              class="group relative flex flex-col items-center gap-1.5 p-2.5 rounded-xl cursor-default transition-all duration-200 border border-transparent"
+              :class="file.isSelected ? 'bg-blue-500/20 border-blue-500/30 shadow-lg' : 'hover:bg-white/5 hover:border-white/5'"
+              @click.stop="selectFile(file, $event)" @dblclick="openItem(file)"
+              @contextmenu.prevent.stop="onContextMenu($event, file)">
+              <span :class="[file.icon, 'text-4xl transition-transform group-hover:scale-110 duration-200']"></span>
+
+              <div v-if="isRenaming === file.id" class="w-full">
+                <input ref="renameInputRef" v-model="renameValue" @blur="finishRename(file)"
+                  @keydown.enter="finishRename(file)" @keydown.esc="isRenaming = null"
+                  class="w-full bg-black/50 text-white text-[10px] text-center border border-blue-500 rounded px-1 py-0.5 outline-none" />
+              </div>
+              <span v-else
+                class="text-[10px] text-neutral-300 text-center break-all line-clamp-2 w-full px-0.5 group-hover:text-white transition-colors"
+                :class="{ 'text-neutral-500': file.isHidden }">
+                {{ file.name }}
+              </span>
+            </div>
           </div>
-          <div class="flex justify-between py-2 border-b border-white/[0.06]">
-            <span class="text-neutral-500">位置</span>
-            <span class="text-neutral-300 truncate max-w-[140px]">{{ currentPath }}</span>
+        </div>
+      </main>
+
+      <!-- Details Panel -->
+      <aside v-if="showDetailsPanel"
+        class="w-56 bg-neutral-800/30 backdrop-blur-sm border-l border-neutral-700/30 p-4 overflow-y-auto">
+        <div v-if="detailsFile" class="flex flex-col gap-4">
+          <div class="flex flex-col items-center gap-2">
+            <span :class="[detailsFile.icon, 'text-6xl']"></span>
+            <span class="text-sm font-medium text-center break-all">{{ detailsFile.name }}</span>
           </div>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between"><span class="text-neutral-500">类型</span><span>{{ detailsFile.type
+            }}</span></div>
+            <div class="flex justify-between"><span class="text-neutral-500">大小</span><span>{{
+              formatSize(detailsFile.size) }}</span></div>
+            <div class="flex justify-between"><span class="text-neutral-500">修改时间</span><span class="text-right">{{
+              formatDate(detailsFile.modifiedTime) }}</span></div>
+            <div class="flex justify-between"><span class="text-neutral-500">权限</span><span class="font-mono">{{
+              formatPermissions(detailsFile.permissions) }}</span></div>
+            <div class="flex justify-between"><span class="text-neutral-500">所有者</span><span>{{ detailsFile.owner ||
+              '--' }}</span></div>
+            <div class="flex justify-between"><span class="text-neutral-500">组</span><span>{{ detailsFile.group || '--'
+            }}</span></div>
+          </div>
+        </div>
+        <div v-else-if="selectedFiles.length > 1" class="text-center text-neutral-500 text-sm">
+          已选择 {{ selectedFiles.length }} 个项目
+        </div>
+        <div v-else class="text-center text-neutral-500 text-sm">
+          选择文件查看详情
         </div>
       </aside>
     </div>
 
-    <!-- 状态栏 -->
-    <div class="flex justify-between items-center px-4 py-2 bg-neutral-800/50 border-t border-white/[0.06] text-[12px] text-neutral-400">
-      <div class="flex items-center gap-3">
-        <span>{{ files.length }} 个项目</span>
-        <span v-if="selectedFiles.length > 0" class="text-sky-400">
-          已选择 {{ selectedFiles.length }} 个
-        </span>
-      </div>
-      <div class="flex items-center gap-4">
-        <span 
-          class="cursor-pointer hover:text-white transition-colors"
-          @click="isPreviewOpen = !isPreviewOpen"
-        >
-          {{ isPreviewOpen ? '隐藏预览' : '显示预览' }}
-        </span>
-        <span>剩余 245 GB 可用</span>
-      </div>
-    </div>
+    <!-- Context Menu - macOS 风格 -->
+    <Teleport to="body">
+      <Transition name="context-menu">
+        <div v-if="contextMenu.show"
+          class="context-menu fixed z-[100] min-w-[220px] bg-neutral-800/80 backdrop-blur-2xl border border-white/15 rounded-xl shadow-2xl py-1.5 overflow-hidden"
+          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
+          <template v-if="contextMenu.targetId">
+            <!-- 打开操作 -->
+            <button @click="openItem(files.find(f => f.id === contextMenu.targetId)!)" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--open-in-new] group-hover:scale-110"></span>
+              <span class="flex-1">打开</span>
+              <span class="context-menu-shortcut">⏎</span>
+            </button>
+            <button v-if="files.find(f => f.id === contextMenu.targetId)?.type !== 'directory'"
+              @click="downloadFile(files.find(f => f.id === contextMenu.targetId)!)" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--download] group-hover:scale-110"></span>
+              <span class="flex-1">下载</span>
+              <span class="context-menu-shortcut">⌘D</span>
+            </button>
 
-    <!-- 上下文菜单 -->
-    <div
-      v-if="contextMenu.show"
-      class="fixed bg-neutral-800/95 backdrop-blur-xl rounded-xl border border-white/[0.08] shadow-2xl py-2 min-w-[200px] z-50"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-      @click.stop
-    >
-      <div class="flex flex-col">
-        <button 
-          class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left"
-          @click="createNewFolder"
-        >
-          <span class="icon-[mdi--folder-plus] text-neutral-400"></span>
-          <span class="flex-1">新建文件夹</span>
-          <span class="text-neutral-500 text-xs">⇧⌘N</span>
-        </button>
-        <button class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left">
-          <span class="icon-[mdi--file-plus] text-neutral-400"></span>
-          <span class="flex-1">新建文件</span>
-          <span class="text-neutral-500 text-xs">⌘N</span>
-        </button>
+            <div class="context-menu-divider"></div>
+
+            <!-- 编辑操作 -->
+            <button @click="startRename(files.find(f => f.id === contextMenu.targetId)!)"
+              class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--rename-box] group-hover:scale-110"></span>
+              <span class="flex-1">重命名</span>
+              <span class="context-menu-shortcut">F2</span>
+            </button>
+            <button @click="copyPath(files.find(f => f.id === contextMenu.targetId)!)" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--content-copy] group-hover:scale-110"></span>
+              <span class="flex-1">复制路径</span>
+              <span class="context-menu-shortcut">⌘C</span>
+            </button>
+            <button @click="openChmodModal(files.find(f => f.id === contextMenu.targetId)!)"
+              class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--shield-key] group-hover:scale-110"></span>
+              <span class="flex-1">修改权限</span>
+            </button>
+
+            <div class="context-menu-divider"></div>
+
+            <!-- 显示简介 -->
+            <button @click="showDetailsPanel = true; hideContextMenu()" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--information-outline] group-hover:scale-110"></span>
+              <span class="flex-1">显示简介</span>
+              <span class="context-menu-shortcut">⌘I</span>
+            </button>
+
+            <div class="context-menu-divider"></div>
+
+            <!-- 危险操作 -->
+            <button @click="deleteSelected" class="context-menu-item context-menu-item-danger group">
+              <span class="context-menu-icon icon-[mdi--trash-can] group-hover:scale-110"></span>
+              <span class="flex-1">移到废纸篓</span>
+              <span class="context-menu-shortcut">⌘⌫</span>
+            </button>
+          </template>
+
+          <template v-else>
+            <!-- 新建操作 -->
+            <button @click="showNewFileModal = true; hideContextMenu()" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--file-plus] group-hover:scale-110"></span>
+              <span class="flex-1">新建文件</span>
+              <span class="context-menu-shortcut">⌘N</span>
+            </button>
+            <button @click="createFolder" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--folder-plus] group-hover:scale-110"></span>
+              <span class="flex-1">新建文件夹</span>
+              <span class="context-menu-shortcut">⇧⌘N</span>
+            </button>
+
+            <div class="context-menu-divider"></div>
+
+            <!-- 视图操作 -->
+            <button @click="refresh(); hideContextMenu()" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--refresh] group-hover:scale-110"></span>
+              <span class="flex-1">刷新</span>
+              <span class="context-menu-shortcut">⌘R</span>
+            </button>
+            <button @click="selectAll(); hideContextMenu()" class="context-menu-item group">
+              <span class="context-menu-icon icon-[mdi--select-all] group-hover:scale-110"></span>
+              <span class="flex-1">全选</span>
+              <span class="context-menu-shortcut">⌘A</span>
+            </button>
+
+            <div class="context-menu-divider"></div>
+
+            <!-- 排列方式 -->
+            <div class="context-menu-label">排列方式</div>
+            <button v-for="opt in [
+              { field: 'name', label: '名称' },
+              { field: 'size', label: '大小' },
+              { field: 'modifiedTime', label: '修改日期' },
+              { field: 'type', label: '类型' }
+            ]" :key="opt.field" @click="toggleSort(opt.field as SortField); hideContextMenu()"
+              class="context-menu-item group pl-8">
+              <span v-if="sortField === opt.field" class="absolute left-3 icon-[mdi--check] text-blue-400"></span>
+              <span class="flex-1">{{ opt.label }}</span>
+            </button>
+
+            <div class="context-menu-divider"></div>
+
+            <!-- 显示选项 -->
+            <button @click="showHidden = !showHidden; hideContextMenu()" class="context-menu-item group">
+              <span v-if="showHidden" class="absolute left-3 icon-[mdi--check] text-blue-400"></span>
+              <span class="context-menu-icon icon-[mdi--eye] group-hover:scale-110 ml-5"></span>
+              <span class="flex-1">显示隐藏文件</span>
+              <span class="context-menu-shortcut">⇧⌘.</span>
+            </button>
+          </template>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- New File Modal -->
+    <Teleport to="body">
+      <div v-if="showNewFileModal"
+        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200]"
+        @click.self="showNewFileModal = false">
+        <div class="bg-neutral-800 border border-white/10 rounded-2xl shadow-2xl w-80 p-5">
+          <div class="text-base font-medium mb-4">新建文件</div>
+          <input v-model="newFileName" placeholder="文件名" @keyup.enter="createFile"
+            class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 mb-4"
+            autofocus />
+          <div class="flex justify-end gap-2">
+            <button @click="showNewFileModal = false"
+              class="px-4 py-1.5 text-sm rounded-lg hover:bg-white/10 transition">取消</button>
+            <button @click="createFile"
+              class="px-4 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 transition">创建</button>
+          </div>
+        </div>
       </div>
-      <div v-if="contextMenu.fileId" class="border-t border-white/[0.08] my-1"></div>
-      <div v-if="contextMenu.fileId" class="flex flex-col">
-        <button 
-          class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left"
-          @click="startRename(files.find(f => f.id === contextMenu.fileId)!)"
-        >
-          <span class="icon-[mdi--pencil] text-neutral-400"></span>
-          <span class="flex-1">重新命名</span>
-          <span class="text-neutral-500 text-xs">↵</span>
-        </button>
-        <button class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left">
-          <span class="icon-[mdi--content-copy] text-neutral-400"></span>
-          <span class="flex-1">复制</span>
-          <span class="text-neutral-500 text-xs">⌘C</span>
-        </button>
-        <button class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left">
-          <span class="icon-[mdi--content-paste] text-neutral-400"></span>
-          <span class="flex-1">粘贴</span>
-          <span class="text-neutral-500 text-xs">⌘V</span>
-        </button>
-        <button 
-          class="flex items-center gap-3 px-4 py-2 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors text-left"
-          @click="deleteFile(contextMenu.fileId!)"
-        >
-          <span class="icon-[mdi--delete]"></span>
-          <span class="flex-1">移到废纸篓</span>
-          <span class="text-red-400/60 text-xs">⌘⌫</span>
-        </button>
+    </Teleport>
+
+    <!-- Chmod Modal -->
+    <Teleport to="body">
+      <div v-if="showChmodModal"
+        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200]"
+        @click.self="showChmodModal = false">
+        <div class="bg-neutral-800 border border-white/10 rounded-2xl shadow-2xl w-80 p-5">
+          <div class="text-base font-medium mb-2">修改权限</div>
+          <div class="text-xs text-neutral-500 mb-4">{{ chmodTargetFile?.name }}</div>
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-sm text-neutral-400">权限 (八进制):</span>
+            <input v-model="chmodValue" placeholder="644" @keyup.enter="applyChmod" maxlength="3"
+              class="w-20 bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-sm font-mono text-center outline-none focus:border-blue-500"
+              autofocus />
+          </div>
+          <div class="text-[10px] text-neutral-500 mb-4">
+            预览: {{ formatPermissions(chmodValue) }}
+          </div>
+          <div class="flex justify-end gap-2">
+            <button @click="showChmodModal = false"
+              class="px-4 py-1.5 text-sm rounded-lg hover:bg-white/10 transition">取消</button>
+            <button @click="applyChmod"
+              class="px-4 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 transition">应用</button>
+          </div>
+        </div>
       </div>
-      <div class="border-t border-white/[0.08] my-1"></div>
-      <div class="flex flex-col">
-        <button class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left">
-          <span class="icon-[mdi--information] text-neutral-400"></span>
-          <span class="flex-1">显示简介</span>
-          <span class="text-neutral-500 text-xs">⌘I</span>
-        </button>
-        <button class="flex items-center gap-3 px-4 py-2 text-[13px] text-neutral-200 hover:bg-white/[0.08] transition-colors text-left">
-          <span class="icon-[mdi--refresh] text-neutral-400"></span>
-          <span class="flex-1">刷新</span>
-          <span class="text-neutral-500 text-xs">⌘R</span>
-        </button>
-      </div>
-    </div>
+    </Teleport>
+
+    <!-- Footer -->
+    <footer
+      class="bg-neutral-800/50 border-t border-white/5 py-1 px-4 text-[10px] text-neutral-500 flex justify-between select-none">
+      <span class="flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full" :class="props.sessionId ? 'bg-green-500' : 'bg-red-500'"></span>
+        {{ props.sessionId ? '已连接' : '未连接' }}
+      </span>
+      <span class="flex gap-4">
+        <span>{{ displayedFiles.length }} 个项目</span>
+        <span v-if="selectedFiles.length > 0">{{ selectedFiles.length }} 个选中</span>
+      </span>
+    </footer>
   </div>
 </template>
+
+<style scoped>
+.files-app {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #171717;
+  color: #e5e5e5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+  overflow: hidden;
+  position: relative;
+  border-radius: 0 0 18px 18px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Context Menu - macOS 风格 */
+.context-menu {
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.context-menu-item {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #e5e5e5;
+  transition: all 0.15s ease;
+}
+
+.context-menu-item:hover {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.context-menu-item-danger {
+  color: #fca5a5;
+}
+
+.context-menu-item-danger:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.context-menu-icon {
+  font-size: 16px;
+  opacity: 0.9;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.context-menu-shortcut {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.context-menu-item:hover .context-menu-shortcut {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  margin: 4px 12px;
+}
+
+.context-menu-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 6px 14px 4px;
+}
+
+/* Context Menu 动画 */
+.context-menu-enter-active {
+  animation: context-menu-in 0.15s ease-out;
+}
+
+.context-menu-leave-active {
+  animation: context-menu-out 0.1s ease-in;
+}
+
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes context-menu-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+</style>

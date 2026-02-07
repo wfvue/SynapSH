@@ -12,8 +12,9 @@ import type { DockItem } from "./desktop/DesktopDock.vue";
 import DesktopStatusBar from "./desktop/DesktopStatusBar.vue";
 import FilesApp from "./apps/FilesApp.vue";
 import ActivityMonitor from "./apps/ActivityMonitor.vue";
+import TextEditorApp from "./apps/TextEditorApp.vue";
 
-type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser";
+type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser" | "editor";
 
 const props = defineProps<{
   initialSession?: string;
@@ -58,7 +59,15 @@ const appTitles: Record<AppId, string> = {
   settings: "设置",
   "app-center": "应用中心",
   browser: "浏览器",
+  editor: "文本编辑器",
 };
+
+// 编辑器状态
+interface EditorFile {
+  path: string;
+  name: string;
+}
+const editorFile = ref<EditorFile | null>(null);
 
 // 应用状态管理
 const openApps = ref<AppId[]>([]);
@@ -104,6 +113,15 @@ async function openApp(id: string) {
     openApps.value.push(appId);
   }
   focusApp(appId);
+}
+
+// 打开文件编辑器
+function openFileInEditor(filePath: string, fileName: string) {
+  editorFile.value = { path: filePath, name: fileName };
+  if (!openApps.value.includes("editor")) {
+    openApps.value.push("editor");
+  }
+  focusApp("editor");
 }
 
 function focusApp(id: AppId) {
@@ -174,10 +192,14 @@ onUnmounted(() => {
         </div>
 
         <!-- 文件管理器 -->
-        <FilesApp v-else-if="app === 'files'" />
+        <FilesApp v-else-if="app === 'files'" :session-id="sessionId" @open-file="openFileInEditor" />
 
         <!-- 活动监视器 -->
         <ActivityMonitor v-else-if="app === 'monitor'" :session-id="sessionId" />
+
+        <!-- 文本编辑器 -->
+        <TextEditorApp v-else-if="app === 'editor' && editorFile" :session-id="sessionId" :file-path="editorFile.path"
+          :file-name="editorFile.name" />
 
         <!-- 其他应用占位 -->
         <div v-else class="app-empty">

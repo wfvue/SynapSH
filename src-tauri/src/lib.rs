@@ -17,20 +17,64 @@ use tokio::sync::{mpsc, watch, Mutex};
 mod db;
 use db::{Database, Machine, MachineInput};
 
+// 文件类型定义
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum FileEntryType {
+    Directory,
+    File,
+    Symlink,
+    Unknown,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    name: String,
+    path: String,
+    #[serde(rename = "type")]
+    entry_type: FileEntryType,
+    size: u64,
+    modified_time: Option<String>,
+    created_time: Option<String>,
+    permissions: String,
+    owner: String,
+    group: String,
+    is_hidden: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileListResult {
+    path: String,
+    entries: Vec<FileEntry>,
+    parent_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTransferProgress {
+    file_name: String,
+    bytes_transferred: u64,
+    total_bytes: u64,
+    percentage: f64,
+}
+
 // SSH 会话管理
 pub struct SSHSession {
     handle: Arc<Mutex<Handle<SSHClient>>>,
     channel: russh::Channel<russh::client::Msg>,
     #[allow(dead_code)]
+    #[allow(dead_code)]
     shell_channel_id: Arc<Mutex<Option<ChannelId>>>,
     http_proxy: Option<HttpProxy>,
+    sftp_session: Arc<Mutex<Option<russh_sftp::client::SftpSession>>>,
 }
 
 struct HttpProxy {
     port: u16,
     shutdown: watch::Sender<bool>,
 }
-
 
 impl HttpProxy {
     async fn start(
@@ -101,8 +145,8 @@ pub struct ProcessInfo {
     status_desc: String,  // 状态描述
     start_time: String,   // 启动时间
     elapsed_time: String, // 运行时长 (TIME字段)
-    vsz: u64,            // 虚拟内存 (KB)
-    rss: u64,            // 物理内存 (KB)
+    vsz: u64,             // 虚拟内存 (KB)
+    rss: u64,             // 物理内存 (KB)
     command: String,      // 完整命令行
 }
 
@@ -250,6 +294,7 @@ impl SSHSession {
             channel,
             shell_channel_id,
             http_proxy: None,
+            sftp_session: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -269,9 +314,7 @@ impl SSHSession {
 
     pub async fn disconnect(self) -> Result<()> {
         let handle = self.handle.lock().await;
-        handle
-            .disconnect(Disconnect::ByApplication, "", "")
-            .await?;
+        handle.disconnect(Disconnect::ByApplication, "", "").await?;
         Ok(())
     }
 
@@ -306,12 +349,7 @@ impl SSHSession {
     pub async fn check_direct_tcpip(&self, host: &str, port: u16) -> Result<()> {
         let handle = self.handle.lock().await;
         let channel = handle
-            .channel_open_direct_tcpip(
-                host.to_string(),
-                port.into(),
-                "127.0.0.1".to_string(),
-                0u32,
-            )
+            .channel_open_direct_tcpip(host.to_string(), port.into(), "127.0.0.1".to_string(), 0u32)
             .await?;
         let _ = channel.close().await;
         Ok(())
@@ -331,6 +369,243 @@ impl SSHSession {
         self.http_proxy = Some(proxy);
         Ok(port)
     }
+
+    /// 获取或创建 SFTP 会话
+    /// 返回 MutexGuard 以确保互斥访问（SFTP 通道不支持并发写入）
+    pub async fn get_sftp(
+        &self,
+    ) -> Result<tokio::sync::MutexGuard<'_, Option<russh_sftp::client::SftpSession>>> {
+        let start = std::time::Instant::now();
+        log::info!("[SFTP] get_sftp: acquiring lock...");
+        let mut guard = self.sftp_session.lock().await;
+        log::info!("[SFTP] get_sftp: lock acquired in {:?}", start.elapsed());
+
+        if guard.is_none() {
+            log::info!("[SFTP] Initializing new SFTP session...");
+            let t1 = std::time::Instant::now();
+            let handle = self.handle.lock().await;
+            log::info!("[SFTP] handle lock acquired in {:?}", t1.elapsed());
+
+            let t2 = std::time::Instant::now();
+            let channel = handle.channel_open_session().await?;
+            log::info!("[SFTP] channel_open_session in {:?}", t2.elapsed());
+
+            let t3 = std::time::Instant::now();
+            channel.request_subsystem(false, "sftp").await?;
+            log::info!("[SFTP] request_subsystem in {:?}", t3.elapsed());
+
+            let t4 = std::time::Instant::now();
+            let sftp = russh_sftp::client::SftpSession::new(channel.into_stream()).await?;
+            log::info!("[SFTP] SftpSession::new in {:?}", t4.elapsed());
+
+            *guard = Some(sftp);
+            log::info!("[SFTP] Total SFTP init: {:?}", start.elapsed());
+        }
+
+        Ok(guard)
+    }
+
+    /// 列出目录内容
+    pub async fn list_directory(&self, path: &str) -> Result<FileListResult> {
+        let total_start = std::time::Instant::now();
+        log::info!("[SFTP] list_directory: {}", path);
+
+        let mut guard = self.get_sftp().await?;
+        log::info!("[SFTP] get_sftp done in {:?}", total_start.elapsed());
+        let sftp = guard.as_ref().unwrap();
+
+        // 读取目录
+        let t_readdir = std::time::Instant::now();
+        let entries = match sftp.read_dir(path).await {
+            Ok(e) => e,
+            Err(e) => {
+                log::warn!("SFTP read_dir failed, invalidating session: {}", e);
+                *guard = None;
+                return Err(e.into());
+            }
+        };
+        log::info!("[SFTP] read_dir completed in {:?}", t_readdir.elapsed());
+
+        let mut file_entries: Vec<FileEntry> = Vec::new();
+        let t_metadata = std::time::Instant::now();
+        let mut metadata_count = 0;
+
+        for entry in entries {
+            let name = entry.file_name();
+            let full_path = format!("{}/{}", path.trim_end_matches('/'), name);
+
+            // 直接使用 DirEntry 自带的 metadata，无需额外网络请求
+            let attrs = entry.metadata();
+            let file_type = entry.file_type();
+            metadata_count += 1;
+
+            let entry_type = match file_type {
+                russh_sftp::protocol::FileType::Dir => FileEntryType::Directory,
+                russh_sftp::protocol::FileType::File => FileEntryType::File,
+                russh_sftp::protocol::FileType::Symlink => FileEntryType::Symlink,
+                _ => FileEntryType::Unknown,
+            };
+
+            let permissions = format!("{:o}", attrs.permissions.unwrap_or(0) & 0o777);
+
+            file_entries.push(FileEntry {
+                name: name.clone(),
+                path: full_path,
+                entry_type,
+                size: attrs.size.unwrap_or(0),
+                modified_time: attrs.mtime.map(|t| {
+                    chrono::DateTime::from_timestamp(t as i64, 0)
+                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_default()
+                }),
+                created_time: None,
+                permissions,
+                owner: attrs.uid.map(|u| u.to_string()).unwrap_or_default(),
+                group: attrs.gid.map(|g| g.to_string()).unwrap_or_default(),
+                is_hidden: name.starts_with('.'),
+            });
+        }
+        log::info!(
+            "[SFTP] metadata for {} files in {:?}",
+            metadata_count,
+            t_metadata.elapsed()
+        );
+
+        // 排序
+        file_entries.sort_by(|a, b| match (&a.entry_type, &b.entry_type) {
+            (FileEntryType::Directory, FileEntryType::File) => std::cmp::Ordering::Less,
+            (FileEntryType::File, FileEntryType::Directory) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        });
+
+        let parent_path = if path == "/" || path.is_empty() {
+            None
+        } else {
+            let path_obj = std::path::Path::new(path);
+            path_obj.parent().map(|p| p.to_string_lossy().to_string())
+        };
+
+        log::info!("[SFTP] list_directory total: {:?}", total_start.elapsed());
+
+        Ok(FileListResult {
+            path: path.to_string(),
+            entries: file_entries,
+            parent_path,
+        })
+    }
+
+    /// 创建目录
+    pub async fn create_directory(&self, path: &str) -> Result<()> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        if let Err(e) = sftp.create_dir(path).await {
+            log::warn!("SFTP create_dir failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
+    /// 删除文件
+    pub async fn remove_file(&self, path: &str) -> Result<()> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        if let Err(e) = sftp.remove_file(path).await {
+            log::warn!("SFTP remove_file failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
+    /// 删除目录
+    pub async fn remove_directory(&self, path: &str) -> Result<()> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        if let Err(e) = sftp.remove_dir(path).await {
+            log::warn!("SFTP remove_dir failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
+    /// 重命名/移动文件
+    pub async fn rename(&self, old_path: &str, new_path: &str) -> Result<()> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        if let Err(e) = sftp.rename(old_path, new_path).await {
+            log::warn!("SFTP rename failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
+    /// 下载文件内容
+    pub async fn read_file(&self, path: &str) -> Result<Vec<u8>> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        let mut file = match sftp.open(path).await {
+            Ok(f) => f,
+            Err(e) => {
+                log::warn!("SFTP open failed: {}", e);
+                *guard = None;
+                return Err(e.into());
+            }
+        };
+
+        let mut contents = Vec::new();
+        if let Err(e) = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut contents).await {
+            log::warn!("SFTP read content failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(contents)
+    }
+
+    /// 上传文件
+    pub async fn write_file(&self, path: &str, contents: &[u8]) -> Result<()> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        let mut file = match sftp.create(path).await {
+            Ok(f) => f,
+            Err(e) => {
+                log::warn!("SFTP create file failed: {}", e);
+                *guard = None;
+                return Err(e.into());
+            }
+        };
+
+        if let Err(e) = tokio::io::AsyncWriteExt::write_all(&mut file, contents).await {
+            log::warn!("SFTP write content failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(())
+    }
+
+    /// 设置文件权限 (chmod)
+    pub async fn set_permissions(&self, path: &str, mode: u32) -> Result<()> {
+        let mut guard = self.get_sftp().await?;
+        let sftp = guard.as_ref().unwrap();
+
+        let mut attrs = russh_sftp::protocol::FileAttributes::default();
+        attrs.permissions = Some(mode);
+
+        if let Err(e) = sftp.set_metadata(path, attrs).await {
+            log::warn!("SFTP set_metadata failed: {}", e);
+            *guard = None;
+            return Err(e.into());
+        }
+        Ok(())
+    }
 }
 // ... existing SSHClient struct ...
 // SSH 客户端处理器
@@ -341,7 +616,10 @@ struct SSHClient {
 
 impl SSHClient {
     fn new(tx: mpsc::Sender<Vec<u8>>, shell_channel_id: Arc<Mutex<Option<ChannelId>>>) -> Self {
-        Self { tx, shell_channel_id }
+        Self {
+            tx,
+            shell_channel_id,
+        }
     }
 }
 
@@ -468,7 +746,9 @@ fn browser_label(session_id: &str) -> String {
 }
 
 fn chrome_profile_dir(session_id: &str, profile_mode: &str) -> Result<std::path::PathBuf, String> {
-    let base = std::env::temp_dir().join("synapsh-chrome").join(browser_label(session_id));
+    let base = std::env::temp_dir()
+        .join("synapsh-chrome")
+        .join(browser_label(session_id));
     let dir = if profile_mode == "new" {
         base.join(format!("profile-{}", uuid::Uuid::new_v4()))
     } else {
@@ -516,7 +796,10 @@ async fn handle_http_client(
     if parts.is_empty() || parts[0] != "CONNECT" {
         let response = "HTTP/1.1 400 Bad Request\r\n\r\n";
         stream.write_all(response.as_bytes()).await?;
-        return Err(anyhow::anyhow!("Invalid HTTP CONNECT request: {}", first_line));
+        return Err(anyhow::anyhow!(
+            "Invalid HTTP CONNECT request: {}",
+            first_line
+        ));
     }
 
     if parts.len() < 2 {
@@ -719,9 +1002,7 @@ fn extract_process_name(command: &str) -> String {
     command
         .split_whitespace()
         .next()
-        .map(|s| {
-            s.split('/').last().unwrap_or(s).to_string()
-        })
+        .map(|s| s.split('/').last().unwrap_or(s).to_string())
         .unwrap_or_else(|| "unknown".to_string())
 }
 
@@ -1005,12 +1286,12 @@ async fn kill_process(session_id: String, pid: u32, signal: Option<i32>) -> Resu
 
     if let Some(session_arc) = sessions.get(&session_id) {
         let session = session_arc.lock().await;
-        
+
         // 默认使用 SIGTERM (15)，如果指定了信号则使用指定信号
         // 常用信号: 1=SIGHUP, 9=SIGKILL, 15=SIGTERM, 18=SIGCONT, 19=SIGSTOP
         let sig = signal.unwrap_or(15);
         let cmd = format!("kill -{} {}", sig, pid);
-        
+
         match session.exec_command(&cmd).await {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("终止进程失败: {}", e)),
@@ -1023,7 +1304,7 @@ async fn kill_process(session_id: String, pid: u32, signal: Option<i32>) -> Resu
 #[tauri::command]
 async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
     log::info!("Getting system stats for session: {}", session_id);
-    
+
     let sessions = get_sessions();
     let sessions = sessions.lock().await;
 
@@ -1048,7 +1329,7 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
             log::error!("Exec command failed: {}", e);
             e.to_string()
         })?;
-        
+
         log::debug!("System stats output length: {}", output.len());
         log::debug!("Raw output preview: {}", &output[..output.len().min(500)]);
 
@@ -1087,7 +1368,7 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
                 continue;
             }
             log::debug!("Processing section: {}", &section[..section.len().min(30)]);
-            
+
             if section.starts_with("CPU@@@") || section.starts_with("CPU") {
                 stats.cpu_percent = SSHSession::parse_cpu(section);
             } else if section.starts_with("MEM@@@") || section.starts_with("MEM") {
@@ -1137,28 +1418,31 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
             } else if section.starts_with("PROC@@@") || section.starts_with("PROC") {
                 // 解析进程信息
                 // 格式: PID|USER|CPU|MEM|VSZ|RSS|STAT|START|TIME|COMMAND
-                let content = section.strip_prefix("PROC@@@").unwrap_or(
-                    section.strip_prefix("PROC").unwrap_or(section)
-                ).trim();
+                let content = section
+                    .strip_prefix("PROC@@@")
+                    .unwrap_or(section.strip_prefix("PROC").unwrap_or(section))
+                    .trim();
                 let lines: Vec<&str> = content.lines().collect();
                 log::debug!("PROC section lines count: {}", lines.len());
-                
+
                 for (idx, line) in lines.iter().enumerate().skip(1) {
-                    if line.trim().is_empty() { continue; }
-                    
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
                     let parts: Vec<&str> = line.split('|').collect();
                     log::debug!("Line {} parts: {:?}", idx, parts);
-                    
+
                     if parts.len() >= 10 {
                         let pid_str = parts[0].trim();
                         // 跳过表头行
                         if pid_str == "PID" || pid_str.parse::<u32>().is_err() {
                             continue;
                         }
-                        
+
                         let status = parts[6].trim().to_string();
                         let status_desc = get_status_description(&status);
-                        
+
                         stats.processes.push(ProcessInfo {
                             pid: pid_str.parse().unwrap_or(0u32),
                             user: parts[1].trim().to_string(),
@@ -1178,12 +1462,13 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
                 log::debug!("Parsed {} processes", stats.processes.len());
             } else if section.starts_with("SYS@@@") || section.starts_with("SYS") {
                 // 移除 "SYS@@@" 前缀并解析剩余内容
-                let content = section.strip_prefix("SYS@@@").unwrap_or(
-                    section.strip_prefix("SYS").unwrap_or(section)
-                ).trim();
+                let content = section
+                    .strip_prefix("SYS@@@")
+                    .unwrap_or(section.strip_prefix("SYS").unwrap_or(section))
+                    .trim();
                 let lines: Vec<&str> = content.lines().collect();
                 log::debug!("SYS section lines: {:?}", lines);
-                
+
                 if lines.len() >= 1 && !lines[0].is_empty() {
                     stats.system.hostname = lines[0].trim().to_string();
                 }
@@ -1215,10 +1500,167 @@ async fn get_system_stats(session_id: String) -> Result<SystemStats, String> {
     }
 }
 
+// 文件操作 Commands
+#[tauri::command]
+async fn list_files(session_id: String, path: String) -> Result<FileListResult, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        session.list_directory(&path).await.map_err(|e| {
+            log::error!("Failed to list directory: {}", e);
+            e.to_string()
+        })
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn create_folder(session_id: String, path: String) -> Result<(), String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        session
+            .create_directory(&path)
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn delete_file_or_folder(
+    session_id: String,
+    path: String,
+    is_directory: bool,
+) -> Result<(), String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        if is_directory {
+            session
+                .remove_directory(&path)
+                .await
+                .map_err(|e| e.to_string())
+        } else {
+            session.remove_file(&path).await.map_err(|e| e.to_string())
+        }
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn rename_file(session_id: String, old_path: String, new_path: String) -> Result<(), String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        session
+            .rename(&old_path, &new_path)
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn download_file(session_id: String, remote_path: String) -> Result<String, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        let contents = session
+            .read_file(&remote_path)
+            .await
+            .map_err(|e| e.to_string())?;
+        // 返回 base64 编码的文件内容
+        Ok(base64_encode(&contents))
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn upload_file(
+    session_id: String,
+    remote_path: String,
+    base64_content: String,
+) -> Result<(), String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        let contents = base64_decode(&base64_content).map_err(|e| e)?;
+        session
+            .write_file(&remote_path, &contents)
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn create_file(
+    session_id: String,
+    path: String,
+    content: Option<String>,
+) -> Result<(), String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        let data = content.unwrap_or_default();
+        session
+            .write_file(&path, data.as_bytes())
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn chmod_file(session_id: String, path: String, mode: u32) -> Result<(), String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    if let Some(session_arc) = sessions.get(&session_id) {
+        let session = session_arc.lock().await;
+        session
+            .set_permissions(&path, mode)
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        Err("Session not found".to_string())
+    }
+}
+
+// base64 解码辅助函数
+fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
+    use base64::{engine::general_purpose, Engine as _};
+    general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| e.to_string())
+}
+
 // 需要在 run() 中注册新命令
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -1235,7 +1677,15 @@ pub fn run() {
             delete_machine,
             test_connection,
             get_system_stats,
-            kill_process
+            kill_process,
+            list_files,
+            create_folder,
+            create_file,
+            delete_file_or_folder,
+            rename_file,
+            download_file,
+            upload_file,
+            chmod_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
