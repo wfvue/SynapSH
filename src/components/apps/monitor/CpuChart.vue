@@ -1,13 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
 
 const props = defineProps<{
     cpuData: number[];
+    coreCount?: number;
 }>();
 
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+
+const currentValue = computed(() => {
+    const val = props.cpuData[props.cpuData.length - 1] ?? 0;
+    return val.toFixed(1);
+});
+
+const avgValue = computed(() => {
+    if (props.cpuData.length === 0) return "0.0";
+    const sum = props.cpuData.reduce((a, b) => a + b, 0);
+    return (sum / props.cpuData.length).toFixed(1);
+});
 
 function initChart() {
     if (!chartRef.value) return;
@@ -102,8 +114,20 @@ onUnmounted(() => {
 <template>
     <div class="cpu-chart">
         <div class="chart-header">
-            <span class="chart-title">CPU 使用率</span>
-            <span class="chart-value">{{ (cpuData[cpuData.length - 1] ?? 0).toFixed(1) }}%</span>
+            <div class="chart-title-section">
+                <span class="chart-title">CPU 使用率</span>
+                <span v-if="coreCount" class="core-info">{{ coreCount }} 核</span>
+            </div>
+            <div class="chart-stats">
+                <div class="stat-item">
+                    <span class="stat-label">当前</span>
+                    <span class="stat-value current">{{ currentValue }}%</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">平均</span>
+                    <span class="stat-value">{{ avgValue }}%</span>
+                </div>
+            </div>
         </div>
         <div ref="chartRef" class="chart-container"></div>
     </div>
@@ -126,15 +150,53 @@ onUnmounted(() => {
     margin-bottom: 12px;
 }
 
+.chart-title-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .chart-title {
     font-size: 0.85rem;
     color: rgba(255, 255, 255, 0.7);
     font-weight: 500;
 }
 
-.chart-value {
-    font-size: 1.25rem;
+.core-info {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.chart-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.stat-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 0.9rem;
     font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    font-family: monospace;
+}
+
+.stat-value.current {
+    font-size: 1.1rem;
     color: #34d399;
 }
 

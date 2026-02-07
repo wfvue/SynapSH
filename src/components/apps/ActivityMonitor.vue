@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import CpuChart from "./monitor/CpuChart.vue";
 import MemoryChart from "./monitor/MemoryChart.vue";
 import DiskChart, { type DiskInfo } from "./monitor/DiskChart.vue";
 import NetworkChart from "./monitor/NetworkChart.vue";
 import ProcessList, { type ProcessInfo } from "./monitor/ProcessList.vue";
+import ProcessDetail from "./monitor/ProcessDetail.vue";
 import SystemOverview from "./monitor/SystemOverview.vue";
 
 const props = defineProps<{
@@ -15,6 +17,10 @@ type TabId = "overview" | "cpu" | "memory" | "disk" | "network" | "processes";
 
 const activeTab = ref<TabId>("overview");
 
+// 进程详情抽屉状态
+const selectedProcess = ref<ProcessInfo | null>(null);
+const detailVisible = ref(false);
+
 const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: "overview", label: "概览", icon: "icon-[mdi--view-dashboard]" },
     { id: "cpu", label: "CPU", icon: "icon-[mdi--chip]" },
@@ -24,67 +30,106 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: "processes", label: "进程", icon: "icon-[mdi--format-list-bulleted]" },
 ];
 
-// 模拟数据 - 后续接入真实后端
-const cpuHistory = ref<number[]>(Array(60).fill(0).map(() => Math.random() * 30 + 10));
-const memoryData = ref({
-    total: 16 * 1024 * 1024 * 1024,
-    used: 8.5 * 1024 * 1024 * 1024,
-    free: 4 * 1024 * 1024 * 1024,
-    cached: 3.5 * 1024 * 1024 * 1024,
-});
-const diskData = ref<DiskInfo[]>([
-    { name: "sda1", total: 500 * 1024 * 1024 * 1024, used: 234 * 1024 * 1024 * 1024, mountPoint: "/" },
-    { name: "sda2", total: 1000 * 1024 * 1024 * 1024, used: 456 * 1024 * 1024 * 1024, mountPoint: "/home" },
-    { name: "sdb1", total: 2000 * 1024 * 1024 * 1024, used: 1200 * 1024 * 1024 * 1024, mountPoint: "/data" },
-]);
-const networkRxHistory = ref<number[]>(Array(60).fill(0).map(() => Math.random() * 1024 * 1024));
-const networkTxHistory = ref<number[]>(Array(60).fill(0).map(() => Math.random() * 512 * 1024));
-const processes = ref<ProcessInfo[]>([
-    { pid: 1, name: "systemd", cpu: 0.1, memory: 0.5, user: "root" },
-    { pid: 234, name: "sshd", cpu: 0.2, memory: 0.3, user: "root" },
-    { pid: 456, name: "nginx", cpu: 2.5, memory: 1.2, user: "www-data" },
-    { pid: 789, name: "node", cpu: 15.3, memory: 8.7, user: "deploy" },
-    { pid: 1024, name: "postgres", cpu: 5.2, memory: 12.4, user: "postgres" },
-    { pid: 1234, name: "redis-server", cpu: 1.1, memory: 2.8, user: "redis" },
-    { pid: 2048, name: "python3", cpu: 8.7, memory: 4.2, user: "deploy" },
-    { pid: 3096, name: "docker", cpu: 3.4, memory: 5.6, user: "root" },
-]);
-const systemInfo = ref({
-    hostname: "prod-server-01",
-    uptime: "15 days, 7:23:45",
-    loadAverage: [0.82, 1.24, 1.56] as [number, number, number],
-    cpuCores: 8,
-    kernelVersion: "5.15.0-generic",
-    totalMemory: 16 * 1024 * 1024 * 1024,
+// 接口定义 (与 Rust 后端一致)
+interface MemoryInfo {
+    total: number;
+    used: number;
+    free: number;
+    cached: number;
+}
+
+interface NetworkInfo {
+    rxBytes: number;
+    txBytes: number;
+}
+
+interface SystemInfo {
+    hostname: string;
+    uptime: string;
+    loadAverage: [number, number, number];
+    cpuCores: number;
+    kernelVersion: string;
+    totalMemory: number;
+}
+
+interface SystemStats {
+    cpuPercent: number;
+    memory: MemoryInfo;
+    disks: DiskInfo[];
+    network: NetworkInfo;
+    processes: ProcessInfo[];
+    system: SystemInfo;
+}
+
+// 状态数据
+const cpuHistory = ref<number[]>(Array(60).fill(0));
+const networkRxHistory = ref<number[]>(Array(60).fill(0));
+const networkTxHistory = ref<number[]>(Array(60).fill(0));
+const memoryData = ref<MemoryInfo>({ total: 0, used: 0, free: 0, cached: 0 });
+const diskData = ref<DiskInfo[]>([]);
+const processes = ref<ProcessInfo[]>([]);
+const systemInfo = ref<SystemInfo>({
+    hostname: "Loading...",
+    uptime: "Loading...",
+    loadAverage: [0, 0, 0],
+    cpuCores: 0,
+    kernelVersion: "Loading...",
+    totalMemory: 0,
 });
 
 let refreshInterval: number | null = null;
+let lastNetworkStats: NetworkInfo | null = null;
 
-function refreshData() {
-    // 模拟数据更新
-    cpuHistory.value = [...cpuHistory.value.slice(1), Math.random() * 40 + 20];
-    networkRxHistory.value = [...networkRxHistory.value.slice(1), Math.random() * 2 * 1024 * 1024];
-    networkTxHistory.value = [...networkTxHistory.value.slice(1), Math.random() * 1024 * 1024];
+async function refreshData() {
+    try {
+        const stats = await invoke<SystemStats>("get_system_stats", { sessionId: props.sessionId });
 
-    // 更新内存
-    const memChange = (Math.random() - 0.5) * 0.5 * 1024 * 1024 * 1024;
-    memoryData.value.used = Math.max(1024 * 1024 * 1024, Math.min(memoryData.value.total * 0.9, memoryData.value.used + memChange));
-    memoryData.value.free = memoryData.value.total - memoryData.value.used - memoryData.value.cached;
+        // 更新 CPU
+        cpuHistory.value = [...cpuHistory.value.slice(1), stats.cpuPercent];
 
-    // 更新进程 CPU/内存
-    processes.value = processes.value.map(p => ({
-        ...p,
-        cpu: Math.max(0, p.cpu + (Math.random() - 0.5) * 2),
-        memory: Math.max(0, p.memory + (Math.random() - 0.5) * 0.5),
-    }));
+        // 更新网络 (计算速率)
+        if (lastNetworkStats) {
+            // 计算每秒字节数 (假设间隔是 2000ms, 但最好根据 timestamp 算)
+            // 这里我们只是简单展示两次通过 SSH 获取数据的差值，这代表了这个间隔内的流量
+            // 如果间隔是 2s，那么速率其实是 diff/2。但图表展示的是"流量"，
+            // 我们可以直接展示差值作为"Recent Traffic"
+            const rxDiff = Math.max(0, stats.network.rxBytes - lastNetworkStats.rxBytes);
+            const txDiff = Math.max(0, stats.network.txBytes - lastNetworkStats.txBytes);
+
+            networkRxHistory.value = [...networkRxHistory.value.slice(1), rxDiff];
+            networkTxHistory.value = [...networkTxHistory.value.slice(1), txDiff];
+        }
+        lastNetworkStats = stats.network;
+
+        // 更新其他数据
+        memoryData.value = stats.memory;
+        diskData.value = stats.disks;
+        processes.value = stats.processes;
+        systemInfo.value = stats.system;
+    } catch (e) {
+        console.error("Failed to fetch system stats:", e);
+        // Error handling: maybe stop refreshing or show error?
+        // systemInfo.value.hostname = "Connection Error";
+    }
 }
 
-function handleKillProcess(pid: number) {
-    console.log(`Kill process: ${pid}`);
+function handleViewDetail(process: ProcessInfo) {
+    selectedProcess.value = process;
+    detailVisible.value = true;
+}
+
+function handleCloseDetail() {
+    detailVisible.value = false;
+    selectedProcess.value = null;
+}
+
+function handleProcessKilled(pid: number) {
+    // 从列表中移除已终止的进程
     processes.value = processes.value.filter(p => p.pid !== pid);
 }
 
 onMounted(() => {
+    refreshData(); // Fetch immediately
     refreshInterval = window.setInterval(refreshData, 2000);
 });
 
@@ -114,7 +159,7 @@ onUnmounted(() => {
                     :load-average="systemInfo.loadAverage" :cpu-cores="systemInfo.cpuCores"
                     :kernel-version="systemInfo.kernelVersion" :total-memory="systemInfo.totalMemory" />
                 <div class="overview-charts">
-                    <CpuChart :cpu-data="cpuHistory" />
+                    <CpuChart :cpu-data="cpuHistory" :core-count="systemInfo.cpuCores" />
                     <MemoryChart :total="memoryData.total" :used="memoryData.used" :free="memoryData.free"
                         :cached="memoryData.cached" />
                 </div>
@@ -126,7 +171,7 @@ onUnmounted(() => {
 
             <!-- CPU 页 -->
             <div v-else-if="activeTab === 'cpu'" class="tab-panel">
-                <CpuChart :cpu-data="cpuHistory" />
+                <CpuChart :cpu-data="cpuHistory" :core-count="systemInfo.cpuCores" />
             </div>
 
             <!-- 内存页 -->
@@ -147,9 +192,22 @@ onUnmounted(() => {
 
             <!-- 进程页 -->
             <div v-else-if="activeTab === 'processes'" class="tab-panel">
-                <ProcessList :processes="processes" @kill="handleKillProcess" />
+                <ProcessList 
+                    :processes="processes" 
+                    :session-id="sessionId"
+                    @view-detail="handleViewDetail" 
+                />
             </div>
         </main>
+
+        <!-- 进程详情抽屉 -->
+        <ProcessDetail
+            :process="selectedProcess"
+            :session-id="sessionId"
+            :visible="detailVisible"
+            @close="handleCloseDetail"
+            @killed="handleProcessKilled"
+        />
     </div>
 </template>
 

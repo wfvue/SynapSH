@@ -21,8 +21,16 @@
 - [ ] Sunburst 可视化视图
 
 ## 阶段三：监控与 AI
-- [ ] /proc 监控拉取与解析（CPU / 内存 / 网卡）
-- [ ] 监控面板（ECharts 仪表盘）
+- [x] /proc 监控拉取与解析（CPU / 内存 / 网卡 / 进程）
+- [x] 监控面板（ECharts 仪表盘）
+- [x] 活动监视器增强：
+  - [x] 扩展 ProcessInfo 结构体，添加详细进程字段（状态、线程数、内存、优先级等）
+  - [x] 优化进程数据获取命令，使用 ps 获取更详细信息
+  - [x] 实现 kill_process 命令，支持多种信号（SIGTERM/SIGKILL/SIGSTOP/SIGCONT）
+  - [x] 重构 ProcessList 组件，支持多列排序和搜索
+  - [x] 创建 ProcessDetail 详情抽屉组件
+  - [x] 集成进程终止功能到前端界面
+  - [x] 优化 CPU 图表，显示核心数和统计信息
 - [ ] Sidecar `llama-server` 启动
 - [ ] 本地 HTTP 调用链打通
 
