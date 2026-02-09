@@ -19,6 +19,10 @@ const emit = defineEmits<{
     maximize: [];
 }>();
 
+// Constants
+const MIN_WIDTH = 400;
+const MIN_HEIGHT = 300;
+
 // 全局 Body Class Cursor 覆盖 (解决 WebView Cursor 问题)
 function setResizeCursor(direction: string) {
     const cursorClass = `cursor-${direction}-resize`;
@@ -143,6 +147,8 @@ function startResize(e: MouseEvent, direction: string) {
     const startY = e.clientY;
     const startWidth = windowWidth.value;
     const startHeight = windowHeight.value;
+    const startWindowX = windowX.value;
+    const startWindowY = windowY.value;
 
     let currentX = e.clientX;
     let currentY = e.clientY;
@@ -156,16 +162,34 @@ function startResize(e: MouseEvent, direction: string) {
         const deltaY = currentY - startY;
 
         if (resizeDirection.value.includes("e")) {
-            windowWidth.value = Math.max(400, startWidth + deltaX);
+            windowWidth.value = Math.max(MIN_WIDTH, startWidth + deltaX);
         }
         if (resizeDirection.value.includes("s")) {
-            windowHeight.value = Math.max(300, startHeight + deltaY);
+            windowHeight.value = Math.max(MIN_HEIGHT, startHeight + deltaY);
         }
         if (resizeDirection.value.includes("w")) {
-            windowWidth.value = Math.max(400, startWidth - deltaX);
+            const newWidth = Math.max(MIN_WIDTH, startWidth - deltaX);
+            // 只有当宽度确实变化时才更新 X 坐标
+            if (newWidth !== startWidth) {
+                const intendedWidth = startWidth - deltaX;
+                if (intendedWidth >= MIN_WIDTH) {
+                    windowWidth.value = intendedWidth;
+                    windowX.value = startWindowX + deltaX;
+                } else {
+                    windowWidth.value = MIN_WIDTH;
+                    windowX.value = startWindowX + (startWidth - MIN_WIDTH);
+                }
+            }
         }
         if (resizeDirection.value.includes("n")) {
-            windowHeight.value = Math.max(300, startHeight - deltaY);
+            const intendedHeight = startHeight - deltaY;
+            if (intendedHeight >= MIN_HEIGHT) {
+                windowHeight.value = intendedHeight;
+                windowY.value = startWindowY + deltaY;
+            } else {
+                windowHeight.value = MIN_HEIGHT;
+                windowY.value = startWindowY + (startHeight - MIN_HEIGHT);
+            }
         }
     }
 
@@ -197,291 +221,91 @@ function startResize(e: MouseEvent, direction: string) {
 </script>
 
 <template>
-    <div class="app-window bg-background/90"
-        :class="[`app-window--${appId}`, { active, resizing: isResizing, dragging: isDragging, 'custom-chrome': customChrome }]"
+    <div class="fixed rounded-[18px] border border-border/40 shadow-2xl backdrop-blur-2xl transition-shadow bg-background/90"
+        :class="[`app-window--${appId}`, { 'shadow-[0_28px_80px_rgba(0,0,0,0.5)]': active, 'transition-none select-none': isResizing || isDragging, 'border-none bg-transparent shadow-[0_10px_30px_rgba(0,0,0,0.3)]': customChrome }]"
         :style="windowStyle" :data-resize-dir="isResizing ? resizeDirection : ''" @mousedown="emit('focus')">
 
-        <header v-if="!customChrome" class="app-titlebar" @mousedown="startDrag">
-            <div class="window-controls">
-                <button class="control control--close" @click.stop="emit('close')"></button>
-                <button class="control control--min" @click.stop="emit('minimize')"></button>
-                <button class="control control--max" @click.stop="emit('maximize')"></button>
+        <header v-if="!customChrome"
+            class="grid grid-cols-[120px_1fr_160px] items-center px-4 py-3 border-b border-white/5 bg-[#121620]/80 rounded-t-[18px] select-none cursor-grab active:cursor-grabbing"
+            @mousedown="startDrag">
+            <div class="flex gap-2">
+                <button
+                    class="w-3 h-3 rounded-full border-none bg-white/25 cursor-pointer transition-transform hover:scale-110 bg-[#ff6b6b]"
+                    @click.stop="emit('close')"></button>
+                <button
+                    class="w-3 h-3 rounded-full border-none bg-white/25 cursor-pointer transition-transform hover:scale-110 bg-[#ffd166]"
+                    @click.stop="emit('minimize')"></button>
+                <button
+                    class="w-3 h-3 rounded-full border-none bg-white/25 cursor-pointer transition-transform hover:scale-110 bg-[#9ae66e]"
+                    @click.stop="emit('maximize')"></button>
             </div>
-            <div class="app-title">{{ title }}</div>
-            <div class="title-actions">
-                <span v-if="statusText" class="status-pill" :class="{ online: statusOnline }">
+            <div class="text-center text-[0.9rem] tracking-[0.08em] text-muted-foreground uppercase">{{ title }}</div>
+            <div class="flex justify-end">
+                <span v-if="statusText"
+                    class="text-[0.72rem] px-2.5 py-1 rounded-full bg-white/10 text-muted-foreground"
+                    :class="{ 'bg-[rgba(94,234,212,0.18)] text-[#bff4ea]': statusOnline }">
                     {{ statusText }}
                 </span>
             </div>
         </header>
 
-        <div class="app-body">
+        <div class="overflow-auto rounded-b-[18px]" :class="[
+            customChrome ? 'h-full rounded-[18px]' : 'h-[calc(100%-48px)]',
+            { 'pointer-events-none': isResizing || isDragging }
+        ]">
             <slot :start-drag="startDrag" :close="() => emit('close')" :minimize="() => emit('minimize')"
                 :maximize="() => emit('maximize')" />
         </div>
 
 
         <!-- Resize handles -->
-        <!-- Resize handles -->
-        <div class="resize-handle resize-n" @mouseenter="setResizeCursor('n')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'n')"></div>
-        <div class="resize-handle resize-s" @mouseenter="setResizeCursor('s')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 's')"></div>
-        <div class="resize-handle resize-e" @mouseenter="setResizeCursor('e')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'e')"></div>
-        <div class="resize-handle resize-w" @mouseenter="setResizeCursor('w')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'w')"></div>
-        <div class="resize-handle resize-ne" @mouseenter="setResizeCursor('ne')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'ne')"></div>
-        <div class="resize-handle resize-nw" @mouseenter="setResizeCursor('nw')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'nw')"></div>
-        <div class="resize-handle resize-se" @mouseenter="setResizeCursor('se')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'se')"></div>
-        <div class="resize-handle resize-sw" @mouseenter="setResizeCursor('sw')" @mouseleave="handleMouseLeave"
-            @mousedown="startResize($event, 'sw')"></div>
+        <!-- North -->
+        <div class="absolute z-[99999] pointer-events-auto left-4 right-4 -top-2 h-4 cursor-ns-resize"
+            @mouseenter="setResizeCursor('n')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'n')">
+        </div>
+        <!-- South -->
+        <div class="absolute z-[99999] pointer-events-auto left-4 right-4 -bottom-2 h-4 cursor-ns-resize"
+            @mouseenter="setResizeCursor('s')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 's')">
+        </div>
+        <!-- East -->
+        <div class="absolute z-[99999] pointer-events-auto top-4 bottom-4 -right-2 w-4 cursor-ew-resize"
+            @mouseenter="setResizeCursor('e')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'e')">
+        </div>
+        <!-- West -->
+        <div class="absolute z-[99999] pointer-events-auto top-4 bottom-4 -left-2 w-4 cursor-ew-resize"
+            @mouseenter="setResizeCursor('w')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'w')">
+        </div>
+
+        <!-- Corner Handles & Visuals -->
+        <!-- NE -->
+        <div class="absolute z-[99999] pointer-events-auto -top-2 -right-2 w-8 h-8 cursor-nesw-resize group flex items-start justify-end p-1"
+            @mouseenter="setResizeCursor('ne')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'ne')">
+            <span
+                class="iconify mdi--resize-bottom-right rotate-180 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+        </div>
+        <!-- NW -->
+        <div class="absolute z-[99999] pointer-events-auto -top-2 -left-2 w-8 h-8 cursor-nwse-resize group flex items-start justify-start p-1"
+            @mouseenter="setResizeCursor('nw')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'nw')">
+            <span
+                class="iconify mdi--resize-bottom-right rotate-[270deg] text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+        </div>
+        <!-- SE -->
+        <div class="absolute z-[99999] pointer-events-auto -bottom-2 -right-2 w-8 h-8 cursor-nwse-resize group flex items-end justify-end p-1"
+            @mouseenter="setResizeCursor('se')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'se')">
+            <span
+                class="iconify mdi--resize-bottom-right text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+        </div>
+        <!-- SW -->
+        <div class="absolute z-[99999] pointer-events-auto -bottom-2 -left-2 w-8 h-8 cursor-nesw-resize group flex items-end justify-start p-1"
+            @mouseenter="setResizeCursor('sw')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'sw')">
+            <span
+                class="iconify mdi--resize-bottom-right rotate-90 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+        </div>
     </div>
 </template>
 
 <style scoped>
-.app-window {
-    pointer-events: auto;
-    position: absolute;
-    border-radius: 18px;
-    border: 1px solid var(--border);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(20px);
-    overflow: visible;
-    transition: box-shadow 0.2s ease, background 0.3s ease;
-    min-width: 400px;
-    min-height: 300px;
-}
-
-.app-window.active {
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
-}
-
-.app-window.resizing {
-    transition: none;
-    user-select: none;
-}
-
-/* Resizing 时统一使用对应方向的 cursor */
-.app-window.resizing[data-resize-dir="n"] {
-    cursor: ns-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="s"] {
-    cursor: ns-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="e"] {
-    cursor: ew-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="w"] {
-    cursor: ew-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="ne"] {
-    cursor: nesw-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="nw"] {
-    cursor: nwse-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="se"] {
-    cursor: nwse-resize !important;
-}
-
-.app-window.resizing[data-resize-dir="sw"] {
-    cursor: nesw-resize !important;
-}
-
-.app-titlebar {
-    display: grid;
-    grid-template-columns: 120px 1fr 160px;
-    align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(18, 22, 32, 0.8);
-    border-radius: 18px 18px 0 0;
-    cursor: grab;
-    user-select: none;
-}
-
-.app-titlebar:active {
-    cursor: grabbing;
-}
-
-.app-window.dragging {
-    transition: none;
-    user-select: none;
-}
-
-.app-window.dragging .app-titlebar {
-    cursor: grabbing;
-}
-
-.window-controls {
-    display: flex;
-    gap: 8px;
-}
-
-.control {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.25);
-    cursor: pointer;
-    transition: transform 0.15s ease;
-}
-
-.control:hover {
-    transform: scale(1.1);
-}
-
-.control--close {
-    background: #ff6b6b;
-}
-
-.control--min {
-    background: #ffd166;
-}
-
-.control--max {
-    background: #9ae66e;
-}
-
-.app-title {
-    text-align: center;
-    font-size: 0.9rem;
-    letter-spacing: 0.08em;
-    color: var(--muted-foreground);
-    text-transform: uppercase;
-}
-
-.title-actions {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.status-pill {
-    font-size: 0.72rem;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--muted-foreground);
-}
-
-.status-pill.online {
-    background: rgba(94, 234, 212, 0.18);
-    color: #bff4ea;
-}
-
-.app-body {
-    height: calc(100% - 48px);
-    overflow: auto;
-    border-radius: 0 0 18px 18px;
-}
-
-.app-window.custom-chrome {
-    border: none;
-    background: transparent;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    /* Let content handle bg or keep it here */
-}
-
-.app-window.custom-chrome .app-body {
-    height: 100%;
-    border-radius: 18px;
-}
-
-/* Resize handles */
-.resize-handle {
-    position: absolute;
-    z-index: 99999;
-    pointer-events: auto;
-    -webkit-app-region: no-drag;
-    transition: background-color 0.15s ease;
-    background: rgba(255, 255, 255, 1e-4);
-    /* Fix for macOS WKWebView cursor issue */
-}
-
-/* 四边 - 增大交互区域 */
-.resize-n {
-    left: 16px;
-    right: 16px;
-    top: -4px;
-    height: 12px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M16 4l-6 8h4v8h-4l6 8 6-8h-4v-8h4z"/></svg>') 16 16, ns-resize !important;
-}
-
-.resize-s {
-    left: 16px;
-    right: 16px;
-    bottom: -4px;
-    height: 12px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M16 4l-6 8h4v8h-4l6 8 6-8h-4v-8h4z"/></svg>') 16 16, ns-resize !important;
-}
-
-.resize-e {
-    top: 16px;
-    bottom: 16px;
-    right: -4px;
-    width: 12px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M28 16l-8-6v4h-8v-4l-8 6 8 6v-4h8v4z"/></svg>') 16 16, ew-resize !important;
-}
-
-.resize-w {
-    top: 16px;
-    bottom: 16px;
-    left: -4px;
-    width: 12px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M28 16l-8-6v4h-8v-4l-8 6 8 6v-4h8v4z"/></svg>') 16 16, ew-resize !important;
-}
-
-/* 四角 - 增大交互区域 */
-.resize-ne {
-    top: -4px;
-    right: -4px;
-    width: 16px;
-    height: 16px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M22.5 9.5l-8.5 2.5 1.5 1.5-6 6 1.5 1.5 6-6 1.5 1.5 2.5-8.5z"/></svg>') 16 16, nesw-resize !important;
-}
-
-.resize-nw {
-    top: -4px;
-    left: -4px;
-    width: 16px;
-    height: 16px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M9.5 9.5l8.5 2.5-1.5 1.5 6 6-1.5 1.5-6-6-1.5 1.5-2.5-8.5z"/></svg>') 16 16, nwse-resize !important;
-}
-
-.resize-se {
-    bottom: -4px;
-    right: -4px;
-    width: 16px;
-    height: 16px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M9.5 9.5l8.5 2.5-1.5 1.5 6 6-1.5 1.5-6-6-1.5 1.5-2.5-8.5z"/></svg>') 16 16, nwse-resize !important;
-}
-
-.resize-sw {
-    bottom: -4px;
-    left: -4px;
-    width: 16px;
-    height: 16px;
-    pointer-events: auto;
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M22.5 9.5l-8.5 2.5 1.5 1.5-6 6 1.5 1.5 6-6 1.5 1.5 2.5-8.5z"/></svg>') 16 16, nesw-resize !important;
-}
+/* Remove scoped styles as they are replaced by Tailwind */
 </style>
 
 <style>

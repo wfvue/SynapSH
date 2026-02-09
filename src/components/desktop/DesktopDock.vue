@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { useAppearance } from '../../composables/useAppearance';
+import AppIcon from './AppIcon.vue';
+
 export interface DockItem {
     id: string;
     label: string;
     icon: string;
+    color: string;
     app?: string;
 }
 
@@ -15,6 +19,8 @@ const emit = defineEmits<{
     openApp: [app: string];
 }>();
 
+const { dockIconSize } = useAppearance();
+
 function handleClick(app: string | undefined) {
     if (app) {
         emit("openApp", app);
@@ -23,69 +29,18 @@ function handleClick(app: string | undefined) {
 </script>
 
 <template>
-    <section class="dock">
-        <button v-for="item in items" :key="item.id" class="dock-item"
-            :class="{ active: item.app && openApps.includes(item.app) }" :title="item.label"
-            @click.stop="handleClick(item.app)">
-            <span :class="item.icon"></span>
-            <span class="dock-indicator" v-if="item.app && openApps.includes(item.app)"></span>
+    <section
+        class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-end gap-2 px-3 py-2 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-3xl z-40 transition-all duration-300">
+        <button v-for="item in items" :key="item.id"
+            class="relative flex items-center justify-center transition-all duration-200 hover:-translate-y-2 hover:scale-110 active:translate-y-[-2px] border-none bg-transparent cursor-pointer group origin-bottom"
+            :class="{ '-translate-y-0.5': item.app && openApps.includes(item.app) }" :title="item.label"
+            :style="{ width: `${dockIconSize}px`, height: `${dockIconSize}px` }" @click.stop="handleClick(item.app)">
+
+            <AppIcon :icon="item.icon" :background="item.color" :size="dockIconSize"
+                class="shadow-md group-hover:brightness-110" />
+
+            <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-white/80 shadow-sm"
+                v-if="item.app && openApps.includes(item.app)"></span>
         </button>
     </section>
 </template>
-
-<style scoped>
-.dock {
-    position: absolute;
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: flex-end;
-    gap: 4px;
-    padding: 4px 8px;
-    border-radius: 16px;
-    background: rgba(20, 20, 20, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(24px);
-    z-index: 4;
-}
-
-.dock-item {
-    position: relative;
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.dock-item:hover {
-    transform: translateY(-8px) scale(1.15);
-}
-
-.dock-item.active {
-    transform: translateY(-2px);
-}
-
-.dock-item span:first-child {
-    font-size: 32px;
-    color: var(--foreground);
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-}
-
-.dock-indicator {
-    position: absolute;
-    bottom: -6px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--foreground);
-}
-</style>

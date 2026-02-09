@@ -93,77 +93,32 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="wallpaper">
+    <div class="absolute inset-0 z-0 overflow-hidden">
         <!-- 自定义图片壁纸 -->
-        <div v-if="isCustomWallpaper && customWallpaperUrl" class="wallpaper-image"
+        <div v-if="isCustomWallpaper && customWallpaperUrl"
+            class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-[background-image] duration-500 ease-in-out"
             :style="{ backgroundImage: `url(${customWallpaperUrl})` }"></div>
 
         <!-- 预设渐变壁纸 -->
         <template v-else-if="currentPresetWallpaper">
-            <div class="wallpaper-gradient" :style="{ background: currentPresetWallpaper.gradient }"></div>
-            <span v-for="(glow, index) in currentPresetWallpaper.glows" :key="index" class="glow" :style="{
-                background: `radial-gradient(circle, ${glow.color}, transparent 70%)`,
-                top: glow.top,
-                left: glow.left,
-                right: glow.right,
-                bottom: glow.bottom,
-            }"></span>
-            <span class="wave wave-a"></span>
-            <span class="wave wave-b"></span>
+            <div class="absolute inset-0 transition-colors duration-500 ease-in-out"
+                :style="{ background: currentPresetWallpaper.gradient }"></div>
+            <span v-for="(glow, index) in currentPresetWallpaper.glows" :key="index"
+                class="absolute w-[380px] h-[380px] rounded-full blur-[60px] opacity-70 transition-all duration-500 ease-in-out"
+                :style="{
+                    background: `radial-gradient(circle, ${glow.color}, transparent 70%)`,
+                    top: glow.top,
+                    left: glow.left,
+                    right: glow.right,
+                    bottom: glow.bottom,
+                }"></span>
+            <span
+                class="absolute w-[120%] h-[240px] left-[-10%] rounded-full opacity-22 blur-[20px] bottom-[32%] bg-gradient-to-r from-sky-300/60 to-teal-300/20"></span>
+            <span
+                class="absolute w-[120%] h-[240px] left-[-10%] rounded-full opacity-22 blur-[20px] bottom-[18%] bg-gradient-to-r from-blue-500/20 to-amber-400/50"></span>
         </template>
     </div>
 </template>
 
-<style scoped>
-.wallpaper {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-}
 
-.wallpaper-gradient {
-    position: absolute;
-    inset: 0;
-    transition: background 0.5s ease;
-}
-
-.wallpaper-image {
-    position: absolute;
-    inset: 0;
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    transition: background-image 0.5s ease;
-}
-
-.glow {
-    position: absolute;
-    width: 380px;
-    height: 380px;
-    border-radius: 50%;
-    filter: blur(60px);
-    opacity: 0.7;
-    transition: all 0.5s ease;
-}
-
-.wave {
-    position: absolute;
-    width: 120%;
-    height: 240px;
-    left: -10%;
-    border-radius: 999px;
-    opacity: 0.22;
-    filter: blur(20px);
-}
-
-.wave-a {
-    bottom: 32%;
-    background: linear-gradient(90deg, rgba(125, 211, 252, 0.6), rgba(94, 234, 212, 0.2));
-}
-
-.wave-b {
-    bottom: 18%;
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.2), rgba(251, 191, 36, 0.5));
-}
-</style>
+/* Scoped styles replaced by Tailwind CSS */

@@ -1,7 +1,8 @@
-/**
-* TextEditorApp.vue - Monaco 文本编辑器组件
-* 用于编辑远程服务器上的文本文件
-*/
+<!-- 
+ TextEditorApp.vue - Monaco 文本编辑器组件
+用于编辑远程服务器上的文本文件
+ -->
+
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, shallowRef } from "vue";
 import { invoke } from "@tauri-apps/api/core";

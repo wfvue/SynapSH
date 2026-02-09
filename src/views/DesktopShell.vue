@@ -43,12 +43,12 @@ const desktopItems: DesktopIconItem[] = [
 
 // Dock 栏配置
 const dockItems: DockItem[] = [
-  { id: "files", label: "访达", icon: "icon-[mdi--folder]", app: "files" },
-  { id: "terminal", label: "终端", icon: "icon-[mdi--console]", app: "terminal" },
-  { id: "browser", label: "浏览器", icon: "icon-[mdi--compass]", app: "browser" },
-  { id: "monitor", label: "活动监视器", icon: "icon-[mdi--chart-line]", app: "monitor" },
-  { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", app: "settings" },
-  { id: "trash", label: "废纸篓", icon: "icon-[mdi--delete]" },
+  { id: "files", label: "访达", icon: "icon-[mdi--folder]", color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)", app: "files" },
+  { id: "terminal", label: "终端", icon: "icon-[mdi--console]", color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)", app: "terminal" },
+  { id: "browser", label: "浏览器", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
+  { id: "monitor", label: "活动监视器", icon: "icon-[mdi--chart-line]", color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)", app: "monitor" },
+  { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)", app: "settings" },
+  { id: "trash", label: "废纸篓", icon: "icon-[mdi--delete]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)" },
 ];
 
 // 应用标题

@@ -9,6 +9,7 @@ import AppearancePanel from "./settings/AppearancePanel.vue";
 import TerminalPanel from "./settings/TerminalPanel.vue";
 import ConnectionPanel from "./settings/ConnectionPanel.vue";
 import AboutPanel from "./settings/AboutPanel.vue";
+import { Input } from "@/components/ui/input";
 
 defineProps<{
     sessionId: string;
@@ -21,14 +22,24 @@ defineProps<{
 type PanelId = "general" | "appearance" | "terminal" | "connection" | "about";
 
 const activePanel = ref<PanelId>("general");
+const searchQuery = ref("");
 
-const panels: { id: PanelId; label: string; icon: string }[] = [
-    { id: "general", label: "通用", icon: "icon-[mdi--cog]" },
-    { id: "appearance", label: "外观", icon: "icon-[mdi--palette]" },
-    { id: "terminal", label: "终端", icon: "icon-[mdi--console]" },
-    { id: "connection", label: "连接", icon: "icon-[mdi--connection]" },
-    { id: "about", label: "关于", icon: "icon-[mdi--information]" },
+const panels: { id: PanelId; label: string; icon: string; keywords: string[] }[] = [
+    { id: "general", label: "通用", icon: "icon-[mdi--cog]", keywords: ["general", "startup", "language", "shell", "启动", "语言", "通用"] },
+    { id: "appearance", label: "外观", icon: "icon-[mdi--palette]", keywords: ["appearance", "theme", "color", "font", "background", "外观", "主题", "颜色", "字体", "背景"] },
+    { id: "terminal", label: "终端", icon: "icon-[mdi--console]", keywords: ["terminal", "font", "cursor", "scrollback", "终端", "字体", "光标", "回滚"] },
+    { id: "connection", label: "连接", icon: "icon-[mdi--connection]", keywords: ["connection", "ssh", "auth", "compression", "timeout", "连接", "认证", "压缩", "超时"] },
+    { id: "about", label: "关于", icon: "icon-[mdi--information]", keywords: ["about", "version", "synapsh", "关于", "版本"] },
 ];
+
+const filteredPanels = computed(() => {
+    if (!searchQuery.value) return panels;
+    const query = searchQuery.value.toLowerCase();
+    return panels.filter(p =>
+        p.label.toLowerCase().includes(query) ||
+        p.keywords.some(k => k.toLowerCase().includes(query))
+    );
+});
 
 const currentPanelLabel = computed(() => {
     return panels.find((p) => p.id === activePanel.value)?.label || "设置";
@@ -36,305 +47,87 @@ const currentPanelLabel = computed(() => {
 </script>
 
 <template>
-    <div class="settings-app">
+    <div
+        class="grid grid-cols-[240px_1fr] h-full bg-background text-foreground rounded-b-2xl overflow-hidden border border-border sm:grid-cols-[200px_1fr] md:grid-cols-[240px_1fr]">
         <!-- 侧边栏 -->
-        <aside class="settings-sidebar">
-            <div class="sidebar-header" @mousedown="startDrag">
+        <aside class="flex flex-col bg-muted/30 border-r border-border backdrop-blur-xl pt-3">
+            <div class="px-4 pb-2 flex flex-col gap-3 drag-region" @mousedown="startDrag">
                 <!-- Mac Traffic Lights -->
-                <div class="window-controls">
-                    <button class="control control--close" @click.stop="close"></button>
-                    <button class="control control--min" @click.stop="minimize"></button>
-                    <button class="control control--max" @click.stop="maximize"></button>
+                <div class="flex gap-2 group">
+                    <button
+                        class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
+                        @click.stop="close">
+                        <span
+                            class="opacity-0 group-hover:opacity-100 text-[8px] font-bold text-black/50 leading-none">×</span>
+                    </button>
+                    <button
+                        class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
+                        @click.stop="minimize">
+                        <span
+                            class="opacity-0 group-hover:opacity-100 text-[8px] font-bold text-black/50 leading-none">−</span>
+                    </button>
+                    <button
+                        class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
+                        @click.stop="maximize">
+                        <span
+                            class="opacity-0 group-hover:opacity-100 text-[8px] font-bold text-black/50 leading-none">+</span>
+                    </button>
                 </div>
 
-                <div class="search-container">
-                    <span class="icon-[mdi--magnify] search-icon"></span>
-                    <input type="text" placeholder="搜索" class="search-input" />
+                <div class="relative px-2 pb-2">
+                    <span
+                        class="icon-[mdi--magnify] absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground text-base pointer-events-none z-10"></span>
+                    <Input type="text" placeholder="搜索设置" v-model="searchQuery"
+                        class="h-8 bg-secondary/50 hover:bg-secondary/80 focus:bg-background border border-transparent focus:border-primary/30 focus-visible:ring-0 focus-visible:ring-offset-0 pl-9 pr-3 text-sm shadow-none rounded-md placeholder:text-muted-foreground/50 transition-all" />
                 </div>
             </div>
 
-            <nav class="sidebar-nav">
-                <div v-for="panel in panels" :key="panel.id" class="nav-item"
-                    :class="{ active: activePanel === panel.id }" @click="activePanel = panel.id">
-                    <span :class="panel.icon" class="nav-icon"></span>
-                    <span class="nav-label">{{ panel.label }}</span>
+            <nav class="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+                <template v-if="filteredPanels.length > 0">
+                    <div v-for="panel in filteredPanels" :key="panel.id"
+                        class="flex items-center gap-3 px-3 py-1.5 rounded-md cursor-pointer transition-colors text-sm group"
+                        :class="[
+                            activePanel === panel.id
+                                ? 'bg-primary text-primary-foreground font-medium shadow-sm'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        ]" @click="activePanel = panel.id">
+                        <span :class="panel.icon" class="text-lg opacity-80 group-hover:opacity-100"></span>
+                        <span>{{ panel.label }}</span>
+                    </div>
+                </template>
+                <div v-else class="px-4 py-8 text-center text-muted-foreground text-xs">
+                    未找到相关设置
                 </div>
             </nav>
         </aside>
 
         <!-- 内容区域 -->
-        <div class="settings-main">
-            <main class="settings-content">
+        <main class="flex flex-col h-full overflow-hidden bg-background/50">
+            <div class="flex-1 overflow-y-auto w-full">
                 <GeneralPanel v-if="activePanel === 'general'" />
                 <AppearancePanel v-else-if="activePanel === 'appearance'" />
                 <TerminalPanel v-else-if="activePanel === 'terminal'" />
                 <ConnectionPanel v-else-if="activePanel === 'connection'" />
                 <AboutPanel v-else-if="activePanel === 'about'" />
-            </main>
-        </div>
+            </div>
+        </main>
     </div>
 </template>
 
 <style scoped>
-.settings-app {
-    height: 100%;
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    background: rgba(14, 18, 28, 0.85);
-    border-radius: 0 0 16px 16px;
-    overflow: hidden;
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Sidebar */
-.settings-sidebar {
-    display: flex;
-    flex-direction: column;
-    background: rgba(0, 0, 0, 0.2);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    padding-top: 10px;
-}
-
-.sidebar-header {
-    padding: 16px 16px 10px;
-    margin-bottom: 4px;
-    border-bottom: none;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+/* 
+  Use standard CSS for drag-region as Tailwind doesn't support 
+  -webkit-app-region directly via standard utilities without plugins 
+*/
+.drag-region {
     -webkit-app-region: drag;
-    /* Allow dragging natively if supported, but we use custom drag */
 }
 
-.window-controls {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 2px;
+button {
+    -webkit-app-region: no-drag;
 }
 
-.control {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.25);
-    cursor: pointer;
-    transition: transform 0.1s ease, background-color 0.1s;
-    position: relative;
-    overflow: hidden;
-}
-
-.control::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    transition: opacity 0.1s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 8px;
-    color: rgba(0, 0, 0, 0.5);
-    font-weight: bold;
-}
-
-.control:hover {
-    /* transform: scale(1.1); // No scale on macos hover usually, just symbol */
-}
-
-.settings-app:hover .control--close::before {
-    content: '×';
-    opacity: 1;
-}
-
-.settings-app:hover .control--min::before {
-    content: '−';
-    opacity: 1;
-}
-
-.settings-app:hover .control--max::before {
-    content: '+';
-    opacity: 1;
-}
-
-.control--close {
-    background: #ff5f56;
-    box-shadow: 0 0 0 0.5px #e0443e;
-}
-
-.control--min {
-    background: #ffbd2e;
-    box-shadow: 0 0 0 0.5px #dea123;
-}
-
-.control--max {
-    background: #27c93f;
-    box-shadow: 0 0 0 0.5px #1aab29;
-}
-
-.control:active {
-    filter: brightness(0.8);
-}
-
-.search-container {
-    position: relative;
-    width: 100%;
-}
-
-.search-icon {
-    position: absolute;
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 16px;
-}
-
-.search-input {
-    width: 100%;
-    height: 28px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    padding: 0 8px 0 30px;
-    color: white;
-    font-size: 13px;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.search-input:focus {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
-.search-input::placeholder {
-    color: rgba(255, 255, 255, 0.3);
-}
-
-.sidebar-nav {
-    flex: 1;
-    padding: 0 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    overflow-y: auto;
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.7);
-    transition: all 0.15s ease;
-    height: 34px;
-}
-
-.nav-item:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.nav-item.active {
-    background: var(--accent-color, #3b82f6);
-    color: white;
-}
-
-.nav-icon {
-    font-size: 18px;
-    opacity: 0.9;
-}
-
-.nav-label {
-    font-size: 13px;
-    font-weight: 500;
-}
-
-/* Main Area */
-.settings-main {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-}
-
-/* Content Header */
-.content-header {
-    height: 52px;
-    display: flex;
-    align-items: center;
-    padding: 0 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.nav-controls {
-    display: flex;
-    gap: 8px;
-    margin-right: 16px;
-}
-
-.nav-btn {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    /* MacOS rounded style */
-    border: none;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.6);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    font-size: 20px;
-}
-
-.nav-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-}
-
-.nav-btn:disabled {
-    opacity: 0.3;
-    cursor: default;
-}
-
-.content-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-/* Content */
-.settings-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    /* Added padding to replace header spacing */
-}
-
-/* Scrollbar */
-.settings-content::-webkit-scrollbar,
-.sidebar-nav::-webkit-scrollbar {
-    width: 6px;
-}
-
-.settings-content::-webkit-scrollbar-track,
-.sidebar-nav::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.settings-content::-webkit-scrollbar-thumb,
-.sidebar-nav::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-}
-
-.settings-content::-webkit-scrollbar-thumb:hover,
-.sidebar-nav::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+input {
+    -webkit-app-region: no-drag;
 }
 </style>

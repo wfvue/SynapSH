@@ -41,13 +41,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <header class="menu-bar">
-        <div class="left-section">
-            <div class="apple-logo">
+    <header
+        class="absolute top-0 inset-x-0 h-8 bg-white/30 dark:bg-black/30 backdrop-blur-2xl flex justify-between items-center px-4 z-50 text-[13px] font-medium text-foreground border-b border-black/5 dark:border-white/5 shadow-sm select-none">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center text-base opacity-90">
                 <span class="icon-[mdi--apple]"></span>
             </div>
-            <span class="app-name font-bold">SynapSH</span>
-            <nav class="menu-items">
+            <span class="font-bold">SynapSH</span>
+            <nav class="flex gap-4 opacity-90">
                 <span>文件</span>
                 <span>编辑</span>
                 <span>视图</span>
@@ -56,26 +57,27 @@ onUnmounted(() => {
             </nav>
         </div>
 
-        <div class="right-section">
-            <div class="status-item" title="SSH 连接状态">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center opacity-90" title="SSH 连接状态">
                 <span class="icon-[mdi--connection] text-lg"
                     :class="{ 'text-green-500': isConnected, 'text-red-500': !isConnected }"></span>
             </div>
 
-            <div class="status-item clickable" @click="toggleTheme" title="切换主题">
+            <div class="flex items-center opacity-90 cursor-pointer hover:opacity-100" @click="toggleTheme"
+                title="切换主题">
                 <span v-if="mode === 'dark'" class="icon-[mdi--weather-night] text-lg"></span>
                 <span v-else class="icon-[mdi--weather-sunny] text-lg"></span>
             </div>
 
-            <div class="status-item">
+            <div class="flex items-center opacity-90">
                 <span class="icon-[mdi--wifi] text-lg"></span>
             </div>
 
-            <div class="status-item">
+            <div class="flex items-center opacity-90">
                 <span class="icon-[mdi--battery-70] text-lg"></span>
             </div>
 
-            <div class="clock-section">
+            <div class="flex gap-2">
                 <span>{{ dateText }}</span>
                 <span>{{ timeText }}</span>
             </div>
@@ -83,71 +85,5 @@ onUnmounted(() => {
     </header>
 </template>
 
-<style scoped>
-.menu-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.3);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 16px;
-    z-index: 1000;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--foreground);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-    user-select: none;
-}
 
-.dark .menu-bar {
-    background: rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    color: #ffffff;
-}
-
-.left-section,
-.right-section {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.apple-logo {
-    display: flex;
-    align-items: center;
-    font-size: 16px;
-    opacity: 0.9;
-}
-
-.menu-items {
-    display: flex;
-    gap: 16px;
-    opacity: 0.9;
-}
-
-.status-item {
-    display: flex;
-    align-items: center;
-    opacity: 0.9;
-}
-
-.clickable {
-    cursor: pointer;
-}
-
-.clickable:hover {
-    opacity: 1;
-}
-
-.clock-section {
-    display: flex;
-    gap: 8px;
-}
-</style>
+/* Scoped styles replaced by Tailwind CSS */

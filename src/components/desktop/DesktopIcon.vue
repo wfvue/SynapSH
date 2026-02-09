@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppIcon from './AppIcon.vue';
+
 export interface DesktopIconItem {
     id: string;
     label: string;
@@ -27,74 +29,17 @@ function handleDblClick() {
 </script>
 
 <template>
-    <button class="desktop-icon" :class="{ selected }" @click.stop="handleClick" @dblclick.stop="handleDblClick">
-        <div class="icon-wrapper" :style="{ background: item.color }">
-            <span :class="item.icon"></span>
-        </div>
-        <span class="icon-label">{{ item.label }}</span>
+    <button
+        class="flex flex-col items-center gap-1.5 p-2 rounded-lg transition-colors w-24 hover:bg-white/20 select-none cursor-pointer group bg-transparent border-none outline-none focus:outline-none"
+        :class="{ 'bg-white/10': selected }" @click.stop="handleClick" @dblclick.stop="handleDblClick">
+
+        <AppIcon :icon="item.icon" :background="item.color" :size="56"
+            class="group-hover:scale-105 group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.25),0_2px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.25)] transition-transform duration-200 ease-out" />
+
+        <span
+            class="text-[12px] text-white/90 text-center drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] max-w-full truncate px-1 rounded leading-tight"
+            :class="{ 'bg-[#0061D8] text-white': selected }">
+            {{ item.label }}
+        </span>
     </button>
 </template>
-
-<style scoped>
-.desktop-icon {
-    background: transparent;
-    border: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    color: var(--foreground);
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 8px;
-    transition: background 0.15s ease;
-    width: 80px;
-}
-
-.desktop-icon.selected {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.desktop-icon:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.icon-wrapper {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow:
-        0 4px 12px rgba(0, 0, 0, 0.15),
-        0 1px 3px rgba(0, 0, 0, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.desktop-icon:hover .icon-wrapper {
-    transform: scale(1.08) translateY(-2px);
-    box-shadow:
-        0 8px 24px rgba(0, 0, 0, 0.25),
-        0 2px 6px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-.icon-wrapper span {
-    font-size: 32px;
-    color: rgba(255, 255, 255, 0.95);
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
-}
-
-.icon-label {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.9);
-    text-align: center;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-    max-width: 72px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-</style>
