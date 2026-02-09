@@ -43,7 +43,7 @@ function handleDblClick() {
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    color: var(--text-primary);
+    color: var(--foreground);
     cursor: pointer;
     padding: 8px;
     border-radius: 8px;
@@ -52,11 +52,11 @@ function handleDblClick() {
 }
 
 .desktop-icon.selected {
-    background: var(--icon-bg);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .desktop-icon:hover {
-    background: var(--icon-bg);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .icon-wrapper {

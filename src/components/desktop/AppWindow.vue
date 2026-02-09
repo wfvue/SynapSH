@@ -9,15 +9,15 @@ const props = defineProps<{
     offset: number;
     statusText?: string;
     statusOnline?: boolean;
+    customChrome?: boolean;
 }>();
 
 const emit = defineEmits<{
     close: [];
     focus: [];
+    minimize: [];
+    maximize: [];
 }>();
-
-// 移除不再需要的 Tauri cursor 逻辑
-// const appWindow = getCurrentWindow(); // Keep for future use if needed
 
 // 全局 Body Class Cursor 覆盖 (解决 WebView Cursor 问题)
 function setResizeCursor(direction: string) {
@@ -60,8 +60,6 @@ const defaultSizes: Record<string, { width: number; height: number }> = {
     "app-center": { width: 860, height: 560 },
     browser: { width: 980, height: 640 },
 };
-
-// onMounted 已移至 windowStyle 后面
 
 const windowStyle = computed(() => ({
     width: `${windowWidth.value}px`,
@@ -195,16 +193,19 @@ function startResize(e: MouseEvent, direction: string) {
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
 }
+
 </script>
 
 <template>
-    <div class="app-window" :class="[`app-window--${appId}`, { active, resizing: isResizing, dragging: isDragging }]"
+    <div class="app-window bg-background/90"
+        :class="[`app-window--${appId}`, { active, resizing: isResizing, dragging: isDragging, 'custom-chrome': customChrome }]"
         :style="windowStyle" :data-resize-dir="isResizing ? resizeDirection : ''" @mousedown="emit('focus')">
-        <header class="app-titlebar" @mousedown="startDrag">
+
+        <header v-if="!customChrome" class="app-titlebar" @mousedown="startDrag">
             <div class="window-controls">
                 <button class="control control--close" @click.stop="emit('close')"></button>
-                <button class="control control--min"></button>
-                <button class="control control--max"></button>
+                <button class="control control--min" @click.stop="emit('minimize')"></button>
+                <button class="control control--max" @click.stop="emit('maximize')"></button>
             </div>
             <div class="app-title">{{ title }}</div>
             <div class="title-actions">
@@ -215,8 +216,10 @@ function startResize(e: MouseEvent, direction: string) {
         </header>
 
         <div class="app-body">
-            <slot />
+            <slot :start-drag="startDrag" :close="() => emit('close')" :minimize="() => emit('minimize')"
+                :maximize="() => emit('maximize')" />
         </div>
+
 
         <!-- Resize handles -->
         <!-- Resize handles -->
@@ -244,9 +247,8 @@ function startResize(e: MouseEvent, direction: string) {
     pointer-events: auto;
     position: absolute;
     border-radius: 18px;
-    background: rgba(var(--window-bg-base), var(--window-transparency, 0.88));
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-strong);
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(20px);
     overflow: visible;
     transition: box-shadow 0.2s ease, background 0.3s ease;
@@ -356,7 +358,7 @@ function startResize(e: MouseEvent, direction: string) {
     text-align: center;
     font-size: 0.9rem;
     letter-spacing: 0.08em;
-    color: var(--text-muted);
+    color: var(--muted-foreground);
     text-transform: uppercase;
 }
 
@@ -370,7 +372,7 @@ function startResize(e: MouseEvent, direction: string) {
     padding: 4px 10px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
-    color: var(--text-muted);
+    color: var(--muted-foreground);
 }
 
 .status-pill.online {
@@ -382,6 +384,18 @@ function startResize(e: MouseEvent, direction: string) {
     height: calc(100% - 48px);
     overflow: auto;
     border-radius: 0 0 18px 18px;
+}
+
+.app-window.custom-chrome {
+    border: none;
+    background: transparent;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    /* Let content handle bg or keep it here */
+}
+
+.app-window.custom-chrome .app-body {
+    height: 100%;
+    border-radius: 18px;
 }
 
 /* Resize handles */

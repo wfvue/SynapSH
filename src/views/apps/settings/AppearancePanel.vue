@@ -163,8 +163,10 @@ watch(
 
 <template>
     <div class="settings-panel">
-        <h2 class="panel-title">外观</h2>
-        <p class="panel-subtitle">个性化您的桌面外观</p>
+        <div class="panel-header">
+            <h2 class="panel-title">外观</h2>
+            <p class="panel-subtitle">个性化您的桌面外观</p>
+        </div>
 
         <section class="settings-section">
             <h3 class="section-title">主题</h3>
@@ -230,122 +232,147 @@ watch(
 </template>
 
 <style scoped>
+/* Global Panel Styles */
 .settings-panel {
-    padding: 24px;
+    padding: 32px;
     color: var(--foreground);
+    max-width: 960px;
+    /* Restored max-width for better readability */
+    margin: 0 auto;
+}
+
+.panel-header {
+    margin-bottom: 32px;
 }
 
 .panel-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin: 0 0 4px 0;
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 8px 0;
     color: var(--foreground);
+    letter-spacing: -0.025em;
 }
 
 .panel-subtitle {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     color: var(--muted-foreground);
-    margin: 0 0 24px 0;
+    margin: 0;
+    line-height: 1.5;
 }
 
 .settings-section {
-    margin-bottom: 28px;
+    margin-bottom: 40px;
 }
 
 .section-title {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--muted-foreground);
-    margin: 0 0 12px 0;
+    margin: 0 0 16px 0;
 }
 
 /* Theme Options */
 .theme-options {
-    display: flex;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
 }
 
 .theme-option {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 16px;
-    background: var(--secondary);
+    gap: 12px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.03);
     border: 2px solid transparent;
-    border-radius: 12px;
+    border-radius: 16px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .theme-option:hover {
-    background: var(--accent);
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-2px);
 }
 
 .theme-option.active {
     border-color: var(--accent-color);
-    background: var(--accent);
+    background: rgba(var(--accent-color-rgb), 0.1);
+    /* Fallback or needs CSS var adjust */
+    background: color-mix(in srgb, var(--accent-color), transparent 90%);
 }
 
 .theme-preview {
-    width: 60px;
-    height: 44px;
-    border-radius: 8px;
+    width: 100%;
+    aspect-ratio: 16/9;
+    border-radius: 10px;
     display: grid;
     place-items: center;
-    font-size: 24px;
+    font-size: 32px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.theme-option:hover .theme-preview {
+    transform: scale(1.02);
 }
 
 .light-preview {
-    background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
     color: #f59e0b;
+    border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .dark-preview {
-    background: linear-gradient(135deg, #1e1e2e 0%, #2d2d3d 100%);
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
     color: #a78bfa;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .auto-preview {
-    background: linear-gradient(135deg, #f0f0f0 0%, #2d2d3d 100%);
+    background: linear-gradient(135deg, #f3f4f6 50%, #111827 50%);
     color: var(--foreground);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .theme-label {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 500;
 }
 
 /* Accent Colors */
 .accent-colors {
     display: flex;
-    gap: 10px;
+    gap: 16px;
     flex-wrap: wrap;
+    padding: 8px 0;
 }
 
 .accent-color {
-    width: 36px;
-    height: 36px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     cursor: pointer;
     display: grid;
     place-items: center;
     color: white;
-    font-size: 16px;
-    border: 3px solid transparent;
-    transition: all 0.2s;
+    font-size: 20px;
+    border: 2px solid transparent;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .accent-color:hover {
-    transform: scale(1.1);
+    transform: scale(1.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .accent-color.active {
-    border-color: var(--foreground);
-    box-shadow: 0 0 0 2px var(--background);
+    transform: scale(1.1);
+    box-shadow: 0 0 0 4px var(--background), 0 0 0 6px var(--accent-color);
 }
 
 /* Wallpaper Upload */
@@ -354,68 +381,86 @@ watch(
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 20px;
-    margin-bottom: 12px;
-    border: 2px dashed var(--border);
-    border-radius: 12px;
+    gap: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
     cursor: pointer;
     transition: all 0.2s;
     color: var(--muted-foreground);
-    background: var(--secondary);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .wallpaper-upload:hover,
 .wallpaper-upload.dragging {
     border-color: var(--accent-color);
-    background: var(--accent);
+    background: rgba(255, 255, 255, 0.05);
     color: var(--foreground);
 }
 
 .wallpaper-upload span:first-child {
-    font-size: 32px;
+    font-size: 40px;
+    opacity: 0.8;
 }
 
 /* Wallpaper Grid */
 .wallpaper-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
 }
 
 .wallpaper-item {
     position: relative;
-    height: 80px;
-    border-radius: 10px;
+    aspect-ratio: 16/9;
+    border-radius: 12px;
     cursor: pointer;
     display: flex;
     align-items: flex-end;
-    padding: 8px 12px;
+    padding: 12px;
     border: 2px solid transparent;
     transition: all 0.2s;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .wallpaper-item:hover {
-    transform: scale(1.02);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
 }
 
 .wallpaper-item.active {
     border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--accent-color);
 }
 
 .wallpaper-name {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+    z-index: 1;
+}
+
+/* Add a gradient overlay for text readability */
+.wallpaper-item::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+    z-index: 0;
 }
 
 .wallpaper-remove {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 20px;
-    height: 20px;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     border: none;
     background: rgba(0, 0, 0, 0.6);
@@ -423,9 +468,11 @@ watch(
     cursor: pointer;
     display: grid;
     place-items: center;
-    font-size: 12px;
+    font-size: 14px;
     opacity: 0;
-    transition: opacity 0.2s;
+    transition: all 0.2s;
+    z-index: 2;
+    backdrop-filter: blur(4px);
 }
 
 .wallpaper-item:hover .wallpaper-remove {
@@ -433,46 +480,18 @@ watch(
 }
 
 .wallpaper-remove:hover {
-    background: rgba(239, 68, 68, 0.8);
+    background: rgba(239, 68, 68, 0.9);
+    transform: scale(1.1);
 }
 
-/* Setting Item */
+/* Settings Item Generic */
 .setting-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px;
-    background: var(--secondary);
-    border-radius: 10px;
-}
-
-.setting-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.setting-label {
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-
-.setting-desc {
-    font-size: 0.75rem;
-    color: var(--muted-foreground);
-}
-
-/* Slider */
-.slider-container {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.slider-value {
-    font-size: 0.85rem;
-    color: var(--muted-foreground);
-    min-width: 40px;
-    text-align: right;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    margin-bottom: 12px;
 }
 </style>

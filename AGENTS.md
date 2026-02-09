@@ -34,6 +34,8 @@ trigger: always_on
 - 使用 `<script setup lang="ts">` 组合式 API
 - Props 使用 TypeScript 接口定义
 - 使用 `defineEmits` 定义事件
+- 使用 shadcn-vue 组件
+
 
 ### CSS 样式
 - 优先使用 TailwindCSS 工具类
@@ -172,19 +174,32 @@ animate-spin         /* 加载旋转 */
 
 ```
 src/
-├── components/     # Vue 组件
-│   ├── MachineManager.vue   # 机器管理
-│   ├── DesktopShell.vue     # 桌面环境
-│   ├── Terminal.vue         # 终端组件
-│   └── ConnectionPanel.vue  # 连接面板
-├── assets/         # 静态资源
-├── style.css       # 全局样式 + TailwindCSS
-└── main.ts         # 入口文件
+├── views/              # 页面和应用
+│   ├── MachineManager.vue   # 机器管理页
+│   ├── DesktopShell.vue     # 桌面环境页
+│   └── apps/                # 桌面内应用
+│       ├── FilesApp.vue
+│       ├── ActivityMonitor.vue
+│       ├── TextEditorApp.vue
+│       ├── SettingsApp.vue
+│       └── BrowserApp.vue
+├── components/         # 可复用组件
+│   ├── desktop/        # 桌面 UI 组件
+│   │   ├── AppWindow.vue
+│   │   ├── DesktopDock.vue
+│   │   └── DesktopIcon.vue
+│   ├── Terminal.vue
+│   ├── TabBar.vue
+│   ├── ConnectionPanel.vue
+│   └── ui/             # shadcn-vue 组件
+├── assets/             # 静态资源
+├── style.css           # 全局样式 + TailwindCSS
+└── main.ts             # 入口文件
 
 src-tauri/src/
-├── lib.rs          # Tauri commands
-├── db.rs           # SQLite 数据库操作
-└── main.rs         # 入口
+├── lib.rs              # Tauri commands
+├── db.rs               # SQLite 数据库操作
+└── main.rs             # 入口
 ```
 
 ## 运行命令

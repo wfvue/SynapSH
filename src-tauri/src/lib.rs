@@ -1055,6 +1055,7 @@ async fn connect_ssh(
     sessions.insert(session_id, Arc::new(Mutex::new(session)));
     info!("会话已保存");
 
+    info!("connect_ssh 命令返回 Ok(())");
     Ok(())
 }
 

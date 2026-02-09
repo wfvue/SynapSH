@@ -44,8 +44,8 @@ function handleClick(app: string | undefined) {
     gap: 4px;
     padding: 4px 8px;
     border-radius: 16px;
-    background: var(--dock-bg);
-    border: 1px solid var(--dock-border);
+    background: rgba(20, 20, 20, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(24px);
     z-index: 4;
 }
@@ -74,7 +74,7 @@ function handleClick(app: string | undefined) {
 
 .dock-item span:first-child {
     font-size: 32px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--foreground);
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
@@ -86,6 +86,6 @@ function handleClick(app: string | undefined) {
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--foreground);
 }
 </style>

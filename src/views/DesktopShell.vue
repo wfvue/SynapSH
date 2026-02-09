@@ -2,15 +2,15 @@
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import Terminal from "./Terminal.vue";
-import DesktopWallpaper from "./desktop/DesktopWallpaper.vue";
-import DesktopIcons from "./desktop/DesktopIcons.vue";
-import type { DesktopIconItem } from "./desktop/DesktopIcon.vue";
-import AppWindow from "./desktop/AppWindow.vue";
-import DesktopDock from "./desktop/DesktopDock.vue";
-import type { DockItem } from "./desktop/DesktopDock.vue";
-import DesktopStatusBar from "./desktop/DesktopStatusBar.vue";
+import Terminal from "../components/Terminal.vue";
+import DesktopWallpaper from "../components/desktop/DesktopWallpaper.vue";
+import DesktopIcons from "../components/desktop/DesktopIcons.vue";
+import type { DesktopIconItem } from "../components/desktop/DesktopIcon.vue";
+import AppWindow from "../components/desktop/AppWindow.vue";
+import DesktopDock from "../components/desktop/DesktopDock.vue";
+import type { DockItem } from "../components/desktop/DesktopDock.vue";
 import FilesApp from "./apps/FilesApp.vue";
+
 import ActivityMonitor from "./apps/ActivityMonitor.vue";
 import TextEditorApp from "./apps/TextEditorApp.vue";
 import SettingsApp from "./apps/SettingsApp.vue";
@@ -24,7 +24,6 @@ const props = defineProps<{
 const isConnected = ref(true);
 const browserError = ref("");
 const sessionId = computed(() => {
-  console.log("DesktopShell sessionId:", props.initialSession);
   return props.initialSession || "default-session";
 });
 
@@ -170,6 +169,7 @@ onUnmounted(() => {
 
 <template>
   <div class="desktop" @click.self="clearDesktopSelection">
+
     <div v-if="browserError" class="browser-error">
       <span class="icon-[mdi--alert-circle]"></span>
       <span class="browser-error-text">{{ browserError }}</span>
@@ -177,6 +177,7 @@ onUnmounted(() => {
     </div>
     <!-- 壁纸背景 -->
     <DesktopWallpaper />
+    <!-- <div style="position: absolute; inset: 0; background: #333; z-index: 0;"></div> -->
 
     <!-- 桌面图标 -->
     <DesktopIcons ref="desktopIconsRef" :items="desktopItems" @open-app="openApp" />
@@ -186,7 +187,8 @@ onUnmounted(() => {
       <AppWindow v-for="app in openApps" :key="app" :app-id="app" :title="appTitles[app]" :active="focusedApp === app"
         :offset="getWindowOffset(app)" :z-index="getWindowZIndex(app)"
         :status-text="app === 'terminal' ? connectionStatus : undefined"
-        :status-online="app === 'terminal' ? isConnected : undefined" @close="closeApp(app)" @focus="focusApp(app)">
+        :status-online="app === 'terminal' ? isConnected : undefined" :custom-chrome="app === 'settings'"
+        @close="closeApp(app)" @focus="focusApp(app)" v-slot="windowProps">
         <!-- 终端应用 -->
         <div v-if="app === 'terminal'" class="terminal-shell">
           <Terminal :session-id="sessionId" />
@@ -203,7 +205,7 @@ onUnmounted(() => {
           :file-name="editorFile.name" />
 
         <!-- 系统设置 -->
-        <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" />
+        <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" v-bind="windowProps" />
 
         <!-- 其他应用占位 -->
         <div v-else class="app-empty">
@@ -217,76 +219,38 @@ onUnmounted(() => {
     <DesktopDock :items="dockItems" :open-apps="openApps" @open-app="openApp" />
 
     <!-- 状态栏 -->
-    <DesktopStatusBar :is-connected="isConnected" />
+    <!-- 状态栏 (Moved to top) -->
+    <!-- <DesktopStatusBar :is-connected="isConnected" /> -->
   </div>
 </template>
 
 <style scoped>
 .desktop {
   position: relative;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  color: var(--text-primary);
-}
-
-.browser-error {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(20, 14, 14, 0.9);
-  border: 1px solid rgba(255, 122, 122, 0.45);
-  color: #ffd5d5;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  z-index: 6;
-  max-width: min(920px, 90vw);
-}
-
-.browser-error-text {
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.browser-error-close {
-  border: none;
-  background: transparent;
-  color: #ffd5d5;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.window-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.terminal-shell {
+  width: 100%;
   height: 100%;
-  padding: 0;
-  background: #1e1e1e;
-  border-radius: 0 0 16px 16px;
   overflow: hidden;
+  color: var(--foreground);
 }
+
+/* ... existing styles ... */
 
 .app-empty {
   height: 100%;
   display: grid;
   place-content: center;
   gap: 12px;
-  color: var(--text-muted);
+  color: var(--muted-foreground);
   text-align: center;
 }
 
 .app-empty h2 {
   font-size: 1.5rem;
-  color: var(--text-primary);
+  color: var(--foreground);
+}
+
+.terminal-shell {
+  height: 100%;
+  width: 100%;
 }
 </style>
