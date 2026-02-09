@@ -1,9 +1,31 @@
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onMounted } from "vue";
 import { useColorMode, useLocalStorage } from "@vueuse/core";
 import DesktopShell from "./views/DesktopShell.vue";
 import MachineManager from "./views/MachineManager.vue";
 import TabBar, { type Tab } from "./components/TabBar.vue";
+import { Toaster } from "@/components/ui/toast";
+
+// 调试：检查 CSS 变量
+onMounted(() => {
+  // 立即检查
+  const checkCssVar = () => {
+    const controlsWidth = getComputedStyle(document.documentElement)
+      .getPropertyValue('--tauri-frame-controls-width');
+    console.log('[Frame Plugin] --tauri-frame-controls-width:', controlsWidth || '(empty)');
+    
+    // 也检查 body 和 html
+    const htmlWidth = document.documentElement.style.getPropertyValue('--tauri-frame-controls-width');
+    console.log('[Frame Plugin] Inline style:', htmlWidth || '(not set)');
+    
+    return controlsWidth;
+  };
+  
+  // 多次检查
+  setTimeout(checkCssVar, 500);
+  setTimeout(checkCssVar, 2000);
+  setTimeout(checkCssVar, 5000);
+});
 
 const globalError = ref<string>("");
 
@@ -153,6 +175,7 @@ function resetToSafeState() {
         </template>
       </Suspense>
     </div>
+    <Toaster />
   </div>
 </template>
 
