@@ -9,13 +9,13 @@ import AppWindow from "../components/desktop/AppWindow.vue";
 import DesktopDock from "../components/desktop/DesktopDock.vue";
 import type { DockItem } from "../components/desktop/DesktopDock.vue";
 import FilesApp from "./apps/FilesApp.vue";
-
 import ActivityMonitor from "./apps/ActivityMonitor.vue";
 import TextEditorApp from "./apps/TextEditorApp.vue";
 import SettingsApp from "./apps/SettingsApp.vue";
 import TerminalApp from "./apps/TerminalApp.vue";
+import DatabaseManagerApp from "./apps/DatabaseManagerApp.vue";
 
-type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser" | "editor";
+type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser" | "editor" | "database";
 
 const props = defineProps<{
   initialSession?: string;
@@ -32,7 +32,7 @@ const desktopItems: DesktopIconItem[] = [
   { id: "computer", label: "此电脑", icon: "icon-[mdi--laptop]", color: "linear-gradient(135deg, #5e6ad2 0%, #3b82f6 100%)", app: "files" },
   { id: "terminal", label: "终端", icon: "icon-[mdi--console]", color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)", app: "terminal" },
   { id: "files", label: "访达", icon: "icon-[mdi--folder]", color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)", app: "files" },
-  { id: "database", label: "数据库", icon: "icon-[mdi--database]", color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)" },
+  { id: "database", label: "数据库", icon: "icon-[mdi--database]", color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)", app: "database" },
   { id: "web", label: "Safari", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
   { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)", app: "settings" },
   { id: "tasks", label: "活动监视器", icon: "icon-[mdi--chart-line]", color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)", app: "monitor" },
@@ -60,6 +60,7 @@ const appTitles: Record<AppId, string> = {
   "app-center": "应用中心",
   browser: "浏览器",
   editor: "文本编辑器",
+  database: "数据库管理",
 };
 
 // 编辑器状态
@@ -200,6 +201,9 @@ onUnmounted(() => {
 
         <!-- 系统设置 -->
         <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" v-bind="windowProps" />
+
+        <!-- 数据库管理 -->
+        <DatabaseManagerApp v-else-if="app === 'database'" :session-id="sessionId" />
 
         <!-- 其他应用占位 -->
         <div v-else class="app-empty">

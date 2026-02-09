@@ -17,6 +17,9 @@ use tokio::sync::{mpsc, watch, Mutex};
 mod db;
 use db::{Database, Machine, MachineInput};
 
+mod database_manager;
+use database_manager::{DatabaseDetectionResult, DatabaseType, InstallOptions};
+
 // 文件类型定义
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -1658,6 +1661,603 @@ fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
+// ==================== 数据库管理 Commands ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DetectDatabasesParams {
+    session_id: String,
+}
+
+#[tauri::command]
+async fn detect_databases(params: DetectDatabasesParams) -> Result<Vec<DatabaseDetectionResult>, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    let session_arc = sessions
+        .get(&params.session_id)
+        .cloned()
+        .ok_or("Session not found")?;
+
+    // 使用 exec_command 直接执行检测命令
+    let results = detect_databases_direct(&session_arc).await?;
+    
+    Ok(results)
+}
+
+async fn detect_databases_direct(
+    session_arc: &Arc<Mutex<SSHSession>>,
+) -> Result<Vec<DatabaseDetectionResult>, String> {
+    let mut results = Vec::new();
+    
+    // MySQL 检测
+    if let Ok(result) = detect_mysql_direct(session_arc).await {
+        results.push(result);
+    }
+    
+    // PostgreSQL 检测
+    if let Ok(result) = detect_postgresql_direct(session_arc).await {
+        results.push(result);
+    }
+    
+    // Redis 检测
+    if let Ok(result) = detect_redis_direct(session_arc).await {
+        results.push(result);
+    }
+    
+    // MongoDB 检测
+    if let Ok(result) = detect_mongodb_direct(session_arc).await {
+        results.push(result);
+    }
+    
+    // MariaDB 检测
+    if let Ok(result) = detect_mariadb_direct(session_arc).await {
+        results.push(result);
+    }
+    
+    Ok(results)
+}
+
+async fn detect_mysql_direct(session_arc: &Arc<Mutex<SSHSession>>) -> Result<DatabaseDetectionResult, String> {
+    let session = session_arc.lock().await;
+    
+    // 检查版本
+    let version_output = session.exec_command("mysql --version 2>/dev/null || echo 'NOT_FOUND'").await
+        .map_err(|e| e.to_string())?;
+    
+    if version_output.contains("NOT_FOUND") {
+        return Ok(DatabaseDetectionResult {
+            db_type: DatabaseType::MySQL,
+            installed: false,
+            version: None,
+            status: database_manager::DatabaseStatus::NotInstalled,
+            port: None,
+            install_path: None,
+        });
+    }
+    
+    let version = extract_version_from_output(&version_output, &["Ver", "version"]);
+    
+    // 检查服务状态
+    let status_cmd = "sudo systemctl is-active mysql 2>/dev/null || sudo service mysql status 2>&1 | grep -q running && echo 'active' || echo 'inactive'";
+    let status_output = session.exec_command(status_cmd).await.unwrap_or_default();
+    let status = if status_output.trim() == "active" {
+        database_manager::DatabaseStatus::Running
+    } else {
+        database_manager::DatabaseStatus::Stopped
+    };
+    
+    // 获取端口
+    let port_output = session.exec_command("mysql -u root -e \"SHOW VARIABLES LIKE 'port';\" 2>/dev/null | tail -1 | awk '{print $2}'").await.unwrap_or_default();
+    let port = port_output.trim().parse::<u16>().ok();
+    
+    // 获取安装路径
+    let path_output = session.exec_command("which mysql 2>/dev/null || echo ''").await.unwrap_or_default();
+    let install_path = path_output.trim().to_string().into();
+    
+    Ok(DatabaseDetectionResult {
+        db_type: DatabaseType::MySQL,
+        installed: true,
+        version,
+        status,
+        port: port.or(Some(3306)),
+        install_path,
+    })
+}
+
+async fn detect_postgresql_direct(session_arc: &Arc<Mutex<SSHSession>>) -> Result<DatabaseDetectionResult, String> {
+    let session = session_arc.lock().await;
+    
+    let version_output = session.exec_command("psql --version 2>/dev/null || echo 'NOT_FOUND'").await
+        .map_err(|e| e.to_string())?;
+    
+    if version_output.contains("NOT_FOUND") {
+        return Ok(DatabaseDetectionResult {
+            db_type: DatabaseType::PostgreSQL,
+            installed: false,
+            version: None,
+            status: database_manager::DatabaseStatus::NotInstalled,
+            port: None,
+            install_path: None,
+        });
+    }
+    
+    let version = extract_version_from_output(&version_output, &["psql", "PostgreSQL"]);
+    
+    let status_cmd = "sudo systemctl is-active postgresql 2>/dev/null || sudo service postgresql status 2>&1 | grep -q running && echo 'active' || echo 'inactive'";
+    let status_output = session.exec_command(status_cmd).await.unwrap_or_default();
+    let status = if status_output.trim() == "active" {
+        database_manager::DatabaseStatus::Running
+    } else {
+        database_manager::DatabaseStatus::Stopped
+    };
+    
+    let port_output = session.exec_command("sudo -u postgres psql -c \"SHOW port;\" 2>/dev/null | tail -3 | head -1 | tr -d ' '").await.unwrap_or_default();
+    let port = port_output.trim().parse::<u16>().ok();
+    
+    let path_output = session.exec_command("which psql 2>/dev/null || echo ''").await.unwrap_or_default();
+    let install_path = path_output.trim().to_string().into();
+    
+    Ok(DatabaseDetectionResult {
+        db_type: DatabaseType::PostgreSQL,
+        installed: true,
+        version,
+        status,
+        port: port.or(Some(5432)),
+        install_path,
+    })
+}
+
+async fn detect_redis_direct(session_arc: &Arc<Mutex<SSHSession>>) -> Result<DatabaseDetectionResult, String> {
+    let session = session_arc.lock().await;
+    
+    let version_output = session.exec_command("redis-server --version 2>/dev/null || echo 'NOT_FOUND'").await
+        .map_err(|e| e.to_string())?;
+    
+    if version_output.contains("NOT_FOUND") {
+        return Ok(DatabaseDetectionResult {
+            db_type: DatabaseType::Redis,
+            installed: false,
+            version: None,
+            status: database_manager::DatabaseStatus::NotInstalled,
+            port: None,
+            install_path: None,
+        });
+    }
+    
+    let version = extract_version_from_output(&version_output, &["v=", "Redis server"]);
+    
+    let status_cmd = "sudo systemctl is-active redis-server 2>/dev/null || sudo systemctl is-active redis 2>/dev/null || sudo service redis-server status 2>&1 | grep -q running && echo 'active' || echo 'inactive'";
+    let status_output = session.exec_command(status_cmd).await.unwrap_or_default();
+    let status = if status_output.trim() == "active" {
+        database_manager::DatabaseStatus::Running
+    } else {
+        database_manager::DatabaseStatus::Stopped
+    };
+    
+    let port_output = session.exec_command("redis-cli CONFIG GET port 2>/dev/null | tail -1").await.unwrap_or_default();
+    let port = port_output.trim().parse::<u16>().ok();
+    
+    let path_output = session.exec_command("which redis-server 2>/dev/null || echo ''").await.unwrap_or_default();
+    let install_path = path_output.trim().to_string().into();
+    
+    Ok(DatabaseDetectionResult {
+        db_type: DatabaseType::Redis,
+        installed: true,
+        version,
+        status,
+        port: port.or(Some(6379)),
+        install_path,
+    })
+}
+
+async fn detect_mongodb_direct(session_arc: &Arc<Mutex<SSHSession>>) -> Result<DatabaseDetectionResult, String> {
+    let session = session_arc.lock().await;
+    
+    let version_output = session.exec_command("mongod --version 2>/dev/null || echo 'NOT_FOUND'").await
+        .map_err(|e| e.to_string())?;
+    
+    if version_output.contains("NOT_FOUND") {
+        return Ok(DatabaseDetectionResult {
+            db_type: DatabaseType::MongoDB,
+            installed: false,
+            version: None,
+            status: database_manager::DatabaseStatus::NotInstalled,
+            port: None,
+            install_path: None,
+        });
+    }
+    
+    let version = extract_version_from_output(&version_output, &["db version", "v"]);
+    
+    let status_cmd = "sudo systemctl is-active mongod 2>/dev/null || sudo service mongod status 2>&1 | grep -q running && echo 'active' || echo 'inactive'";
+    let status_output = session.exec_command(status_cmd).await.unwrap_or_default();
+    let status = if status_output.trim() == "active" {
+        database_manager::DatabaseStatus::Running
+    } else {
+        database_manager::DatabaseStatus::Stopped
+    };
+    
+    let path_output = session.exec_command("which mongod 2>/dev/null || echo ''").await.unwrap_or_default();
+    let install_path = path_output.trim().to_string().into();
+    
+    Ok(DatabaseDetectionResult {
+        db_type: DatabaseType::MongoDB,
+        installed: true,
+        version,
+        status,
+        port: Some(27017),
+        install_path,
+    })
+}
+
+async fn detect_mariadb_direct(session_arc: &Arc<Mutex<SSHSession>>) -> Result<DatabaseDetectionResult, String> {
+    let session = session_arc.lock().await;
+    
+    let version_output = session.exec_command("mariadb --version 2>/dev/null || mysql --version 2>/dev/null || echo 'NOT_FOUND'").await
+        .map_err(|e| e.to_string())?;
+    
+    if version_output.contains("NOT_FOUND") || !version_output.to_lowercase().contains("mariadb") {
+        return Ok(DatabaseDetectionResult {
+            db_type: DatabaseType::MariaDB,
+            installed: false,
+            version: None,
+            status: database_manager::DatabaseStatus::NotInstalled,
+            port: None,
+            install_path: None,
+        });
+    }
+    
+    let version = extract_version_from_output(&version_output, &["Ver", "version"]);
+    
+    let status_cmd = "sudo systemctl is-active mariadb 2>/dev/null || sudo service mariadb status 2>&1 | grep -q running && echo 'active' || echo 'inactive'";
+    let status_output = session.exec_command(status_cmd).await.unwrap_or_default();
+    let status = if status_output.trim() == "active" {
+        database_manager::DatabaseStatus::Running
+    } else {
+        database_manager::DatabaseStatus::Stopped
+    };
+    
+    let port_output = session.exec_command("mariadb -u root -e \"SHOW VARIABLES LIKE 'port';\" 2>/dev/null | tail -1 | awk '{print $2}'").await.unwrap_or_default();
+    let port = port_output.trim().parse::<u16>().ok();
+    
+    let path_output = session.exec_command("which mariadb 2>/dev/null || which mysql 2>/dev/null || echo ''").await.unwrap_or_default();
+    let install_path = path_output.trim().to_string().into();
+    
+    Ok(DatabaseDetectionResult {
+        db_type: DatabaseType::MariaDB,
+        installed: true,
+        version,
+        status,
+        port: port.or(Some(3306)),
+        install_path,
+    })
+}
+
+fn extract_version_from_output(output: &str, keywords: &[&str]) -> Option<String> {
+    for line in output.lines() {
+        for keyword in keywords {
+            if let Some(pos) = line.find(keyword) {
+                let after = &line[pos + keyword.len()..];
+                // 简单提取版本号
+                let parts: Vec<&str> = after.split_whitespace().collect();
+                for part in parts {
+                    if part.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                        return Some(part.trim_matches(|c: char| !c.is_ascii_digit() && c != '.').to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallDatabaseParams {
+    session_id: String,
+    db_type: DatabaseType,
+    options: InstallOptions,
+}
+
+#[tauri::command]
+async fn install_database(params: InstallDatabaseParams) -> Result<String, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    let session_arc = sessions
+        .get(&params.session_id)
+        .cloned()
+        .ok_or("Session not found")?;
+
+    let session = session_arc.lock().await;
+    
+    // 检测操作系统
+    let os_info = detect_os_info(&session).await.map_err(|e| e.to_string())?;
+    
+    // 生成安装脚本
+    let install_script = generate_install_script(&params.db_type, &os_info, &params.options);
+    
+    // 执行安装
+    let output = session.exec_command(&install_script).await.map_err(|e| e.to_string())?;
+    
+    Ok(output)
+}
+
+async fn detect_os_info(session: &SSHSession) -> Result<OsInfo> {
+    let os_release = session.exec_command("cat /etc/os-release 2>/dev/null || echo 'ID=unknown'").await?;
+    
+    let mut id = "unknown".to_string();
+    let mut like = None;
+
+    for line in os_release.lines() {
+        if line.starts_with("ID=") {
+            id = line.trim_start_matches("ID=").trim_matches('"').to_string();
+        } else if line.starts_with("ID_LIKE=") {
+            like = Some(line.trim_start_matches("ID_LIKE=").trim_matches('"').to_string());
+        }
+    }
+
+    let package_manager = if id.contains("debian") || id.contains("ubuntu") || like.as_ref().map(|l| l.contains("debian")).unwrap_or(false) {
+        PackageManager::Apt
+    } else if id.contains("centos") || id.contains("rhel") || id.contains("fedora") || like.as_ref().map(|l| l.contains("rhel")).unwrap_or(false) {
+        PackageManager::Yum
+    } else {
+        PackageManager::Unknown
+    };
+
+    Ok(OsInfo {
+        id,
+        package_manager,
+    })
+}
+
+#[derive(Debug, Clone)]
+struct OsInfo {
+    id: String,
+    package_manager: PackageManager,
+}
+
+#[derive(Debug, Clone)]
+enum PackageManager {
+    Apt,
+    Yum,
+    Unknown,
+}
+
+fn generate_install_script(db_type: &DatabaseType, os: &OsInfo, options: &InstallOptions) -> String {
+    let port = options.port.unwrap_or_else(|| db_type.default_port());
+    let password = options.root_password.as_deref().unwrap_or("root");
+    
+    match db_type {
+        DatabaseType::MySQL => generate_mysql_install(os, port, password),
+        DatabaseType::PostgreSQL => generate_postgresql_install(os, port),
+        DatabaseType::Redis => generate_redis_install(os, port),
+        DatabaseType::MongoDB => generate_mongodb_install(os, port),
+        DatabaseType::MariaDB => generate_mariadb_install(os, port, password),
+        _ => "echo 'Unsupported database type'".to_string(),
+    }
+}
+
+fn generate_mysql_install(os: &OsInfo, port: u16, password: &str) -> String {
+    match os.package_manager {
+        PackageManager::Apt => format!(
+            r#"export DEBIAN_FRONTEND=noninteractive && 
+sudo apt-get update && 
+sudo apt-get install -y mysql-server && 
+sudo systemctl start mysql && 
+sudo systemctl enable mysql && 
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{}'; FLUSH PRIVILEGES;" && 
+echo "MySQL installed successfully on port {}""#,
+            password, port
+        ),
+        PackageManager::Yum => format!(
+            r#"sudo yum install -y mysql-server && 
+sudo systemctl start mysqld && 
+sudo systemctl enable mysqld && 
+echo "MySQL installed successfully on port {}""#,
+            port
+        ),
+        _ => "echo 'Unsupported package manager'".to_string(),
+    }
+}
+
+fn generate_postgresql_install(os: &OsInfo, port: u16) -> String {
+    match os.package_manager {
+        PackageManager::Apt => format!(
+            r#"sudo apt-get update && 
+sudo apt-get install -y postgresql postgresql-contrib && 
+sudo systemctl start postgresql && 
+sudo systemctl enable postgresql && 
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';" && 
+echo "PostgreSQL installed successfully on port {}""#,
+            port
+        ),
+        PackageManager::Yum => format!(
+            r#"sudo yum install -y postgresql-server postgresql-contrib && 
+sudo postgresql-setup initdb 2>/dev/null || true && 
+sudo systemctl start postgresql && 
+sudo systemctl enable postgresql && 
+echo "PostgreSQL installed successfully on port {}""#,
+            port
+        ),
+        _ => "echo 'Unsupported package manager'".to_string(),
+    }
+}
+
+fn generate_redis_install(os: &OsInfo, port: u16) -> String {
+    match os.package_manager {
+        PackageManager::Apt => format!(
+            r#"sudo apt-get update && 
+sudo apt-get install -y redis-server && 
+sudo sed -i 's/^#*port .*/port {}/' /etc/redis/redis.conf 2>/dev/null || true && 
+sudo systemctl restart redis-server && 
+sudo systemctl enable redis-server && 
+echo "Redis installed successfully on port {}""#,
+            port, port
+        ),
+        PackageManager::Yum => format!(
+            r#"sudo yum install -y redis && 
+sudo systemctl start redis && 
+sudo systemctl enable redis && 
+echo "Redis installed successfully on port {}""#,
+            port
+        ),
+        _ => "echo 'Unsupported package manager'".to_string(),
+    }
+}
+
+fn generate_mongodb_install(os: &OsInfo, port: u16) -> String {
+    match os.package_manager {
+        PackageManager::Apt => format!(
+            r#"curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor 2>/dev/null && 
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs 2>/dev/null || echo 'jammy')/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list && 
+sudo apt-get update && 
+sudo apt-get install -y mongodb-org && 
+sudo systemctl start mongod && 
+sudo systemctl enable mongod && 
+echo "MongoDB installed successfully on port {}""#,
+            port
+        ),
+        PackageManager::Yum => format!(
+            r#"echo '[mongodb-org-7.0]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/7.0/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://pgp.mongodb.com/server-7.0.asc' | sudo tee /etc/yum.repos.d/mongodb-org-7.0.repo && 
+sudo yum install -y mongodb-org && 
+sudo systemctl start mongod && 
+sudo systemctl enable mongod && 
+echo "MongoDB installed successfully on port {}""#,
+            port
+        ),
+        _ => "echo 'Unsupported package manager'".to_string(),
+    }
+}
+
+fn generate_mariadb_install(os: &OsInfo, port: u16, password: &str) -> String {
+    match os.package_manager {
+        PackageManager::Apt => format!(
+            r#"sudo apt-get update && 
+sudo apt-get install -y mariadb-server && 
+sudo systemctl start mariadb && 
+sudo systemctl enable mariadb && 
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{}'; FLUSH PRIVILEGES;" && 
+echo "MariaDB installed successfully on port {}""#,
+            password, port
+        ),
+        PackageManager::Yum => format!(
+            r#"sudo yum install -y mariadb-server && 
+sudo systemctl start mariadb && 
+sudo systemctl enable mariadb && 
+echo "MariaDB installed successfully on port {}""#,
+            port
+        ),
+        _ => "echo 'Unsupported package manager'".to_string(),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManageServiceParams {
+    session_id: String,
+    service_name: String,
+    action: String, // "start", "stop", "restart", "enable"
+}
+
+#[tauri::command]
+async fn manage_database_service(params: ManageServiceParams) -> Result<String, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    let session_arc = sessions
+        .get(&params.session_id)
+        .cloned()
+        .ok_or("Session not found")?;
+
+    let session = session_arc.lock().await;
+    
+    let cmd = match params.action.as_str() {
+        "start" => format!("sudo systemctl start {} 2>&1 || sudo service {} start 2>&1", params.service_name, params.service_name),
+        "stop" => format!("sudo systemctl stop {} 2>&1 || sudo service {} stop 2>&1", params.service_name, params.service_name),
+        "restart" => format!("sudo systemctl restart {} 2>&1 || sudo service {} restart 2>&1", params.service_name, params.service_name),
+        "enable" => format!("sudo systemctl enable {} 2>&1", params.service_name),
+        _ => return Err(format!("Unknown action: {}", params.action)),
+    };
+
+    session.exec_command(&cmd).await.map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GetDatabaseConfigParams {
+    session_id: String,
+    db_type: DatabaseType,
+}
+
+#[tauri::command]
+async fn get_database_config(params: GetDatabaseConfigParams) -> Result<String, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    let session_arc = sessions
+        .get(&params.session_id)
+        .cloned()
+        .ok_or("Session not found")?;
+
+    let session = session_arc.lock().await;
+    
+    let config_path = match params.db_type {
+        DatabaseType::MySQL | DatabaseType::MariaDB => "/etc/mysql/my.cnf /etc/my.cnf",
+        DatabaseType::PostgreSQL => "/etc/postgresql/*/main/postgresql.conf",
+        DatabaseType::Redis => "/etc/redis/redis.conf /etc/redis.conf",
+        DatabaseType::MongoDB => "/etc/mongod.conf",
+        _ => return Err(format!("暂不支持获取 {:?} 配置", params.db_type)),
+    };
+
+    let cmd = format!("cat {} 2>/dev/null | head -500", config_path);
+    session.exec_command(&cmd).await.map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateDatabaseConfigParams {
+    session_id: String,
+    db_type: DatabaseType,
+    config_content: String,
+}
+
+#[tauri::command]
+async fn update_database_config(params: UpdateDatabaseConfigParams) -> Result<String, String> {
+    let sessions = get_sessions();
+    let sessions = sessions.lock().await;
+
+    let session_arc = sessions
+        .get(&params.session_id)
+        .cloned()
+        .ok_or("Session not found")?;
+
+    let session = session_arc.lock().await;
+    
+    let config_path = match params.db_type {
+        DatabaseType::MySQL | DatabaseType::MariaDB => "/etc/mysql/my.cnf",
+        DatabaseType::Redis => "/etc/redis/redis.conf",
+        DatabaseType::MongoDB => "/etc/mongod.conf",
+        _ => return Err(format!("暂不支持修改 {:?} 配置", params.db_type)),
+    };
+
+    // 备份原配置
+    let backup_cmd = format!("sudo cp {} {}.backup.$(date +%Y%m%d_%H%M%S) 2>&1", config_path, config_path);
+    let _ = session.exec_command(&backup_cmd).await;
+
+    // 写入新配置 (使用 base64 避免转义问题)
+    let base64_content = base64_encode(params.config_content.as_bytes());
+    let cmd = format!("echo '{}' | base64 -d | sudo tee {} > /dev/null 2>&1", base64_content, config_path);
+    
+    session.exec_command(&cmd).await.map_err(|e| e.to_string())
+}
+
 // 需要在 run() 中注册新命令
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -1686,7 +2286,13 @@ pub fn run() {
             rename_file,
             download_file,
             upload_file,
-            chmod_file
+            chmod_file,
+            // 数据库管理命令
+            detect_databases,
+            install_database,
+            manage_database_service,
+            get_database_config,
+            update_database_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
