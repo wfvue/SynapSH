@@ -1,3 +1,7 @@
+<!--
+  ConnectionPanel.vue - SSH 连接配置面板
+  用于配置 SSH 连接参数并建立连接
+-->
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
@@ -81,270 +85,78 @@ function selectKeyFile() {
 </script>
 
 <template>
-  <div class="connection-panel">
-    <div class="panel-header">
-      <h2>连接配置</h2>
+  <div class="flex flex-col h-full">
+    <div class="px-4 py-4 border-b border-border">
+      <h2 class="text-base font-semibold text-foreground">连接配置</h2>
     </div>
-    
-    <div class="panel-content">
-      <div class="form-group">
-        <label>主机地址</label>
-        <input 
-          v-model="host" 
-          type="text" 
-          placeholder="例如: 192.168.1.1"
-          :disabled="isConnected"
-        />
+
+    <div class="p-4 flex flex-col gap-4">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm text-muted-foreground font-medium">主机地址</label>
+        <input v-model="host" type="text" placeholder="例如: 192.168.1.1" :disabled="isConnected"
+          class="px-3 py-2 bg-muted border border-border rounded-md text-foreground text-sm outline-none focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" />
       </div>
-      
-      <div class="form-group">
-        <label>端口</label>
-        <input 
-          v-model.number="port" 
-          type="number" 
-          :disabled="isConnected"
-        />
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm text-muted-foreground font-medium">端口</label>
+        <input v-model.number="port" type="number" :disabled="isConnected"
+          class="px-3 py-2 bg-muted border border-border rounded-md text-foreground text-sm outline-none focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" />
       </div>
-      
-      <div class="form-group">
-        <label>用户名</label>
-        <input 
-          v-model="username" 
-          type="text" 
-          placeholder="root"
-          :disabled="isConnected"
-        />
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm text-muted-foreground font-medium">用户名</label>
+        <input v-model="username" type="text" placeholder="root" :disabled="isConnected"
+          class="px-3 py-2 bg-muted border border-border rounded-md text-foreground text-sm outline-none focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" />
       </div>
-      
-      <div class="form-group">
-        <label>认证方式</label>
-        <div class="auth-type">
-          <button 
-            :class="{ active: authType === 'password' }"
-            @click="authType = 'password'"
-            :disabled="isConnected"
-          >
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm text-muted-foreground font-medium">认证方式</label>
+        <div class="flex gap-2">
+          <button :class="authType === 'password' ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-border text-muted-foreground'"
+            @click="authType = 'password'" :disabled="isConnected"
+            class="flex-1 px-3 py-2 border rounded-md text-sm cursor-pointer transition-all disabled:opacity-60 disabled:cursor-not-allowed">
             密码
           </button>
-          <button 
-            :class="{ active: authType === 'key' }"
-            @click="authType = 'key'"
-            :disabled="isConnected"
-          >
+          <button :class="authType === 'key' ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-border text-muted-foreground'"
+            @click="authType = 'key'" :disabled="isConnected"
+            class="flex-1 px-3 py-2 border rounded-md text-sm cursor-pointer transition-all disabled:opacity-60 disabled:cursor-not-allowed">
             密钥
           </button>
         </div>
       </div>
-      
-      <div v-if="authType === 'password'" class="form-group">
-        <label>密码</label>
-        <input 
-          v-model="password" 
-          type="password" 
-          placeholder="输入密码"
-          :disabled="isConnected"
-        />
+
+      <div v-if="authType === 'password'" class="flex flex-col gap-1.5">
+        <label class="text-sm text-muted-foreground font-medium">密码</label>
+        <input v-model="password" type="password" placeholder="输入密码" :disabled="isConnected"
+          class="px-3 py-2 bg-muted border border-border rounded-md text-foreground text-sm outline-none focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" />
       </div>
-      
-      <div v-else class="form-group">
-        <label>私钥路径</label>
-        <div class="key-input">
-          <input 
-            v-model="privateKey" 
-            type="text" 
-            placeholder="选择私钥文件"
-            readonly
-            :disabled="isConnected"
-          />
-          <button 
-            @click="selectKeyFile"
-            :disabled="isConnected"
-          >
+
+      <div v-else class="flex flex-col gap-1.5">
+        <label class="text-sm text-muted-foreground font-medium">私钥路径</label>
+        <div class="flex gap-2">
+          <input v-model="privateKey" type="text" placeholder="选择私钥文件" readonly :disabled="isConnected"
+            class="flex-1 px-3 py-2 bg-muted border border-border rounded-md text-foreground text-sm disabled:opacity-60 disabled:cursor-not-allowed" />
+          <button @click="selectKeyFile" :disabled="isConnected"
+            class="px-3 py-2 bg-muted border border-border rounded-md text-foreground text-sm cursor-pointer hover:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed">
             浏览
           </button>
         </div>
       </div>
-      
-      <div v-if="error" class="error-message">
+
+      <div v-if="error" class="px-3 py-2.5 bg-destructive/10 border border-destructive rounded-md text-destructive text-sm">
         {{ error }}
       </div>
-      
-      <div class="actions">
-        <button 
-          v-if="!isConnected"
-          class="btn-primary"
-          :disabled="!canConnect || isConnecting"
-          @click="connect"
-        >
+
+      <div class="mt-auto pt-4 border-t border-border">
+        <button v-if="!isConnected" :disabled="!canConnect || isConnecting" @click="connect"
+          class="w-full px-4 py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium cursor-pointer hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
           {{ isConnecting ? '连接中...' : '连接' }}
         </button>
-        <button 
-          v-else
-          class="btn-danger"
-          @click="disconnect"
-        >
+        <button v-else @click="disconnect"
+          class="w-full px-4 py-2.5 bg-destructive text-destructive-foreground rounded-md text-sm font-medium cursor-pointer hover:bg-destructive/90 transition-colors">
           断开连接
         </button>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.connection-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.panel-header {
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-header h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.panel-content {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-group label {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.form-group input {
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  transition: border-color 0.2s;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.form-group input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.auth-type {
-  display: flex;
-  gap: 8px;
-}
-
-.auth-type button {
-  flex: 1;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.auth-type button.active {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-.auth-type button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.key-input {
-  display: flex;
-  gap: 8px;
-}
-
-.key-input input {
-  flex: 1;
-}
-
-.key-input button {
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.key-input button:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-.error-message {
-  padding: 10px 12px;
-  background-color: rgba(244, 135, 113, 0.1);
-  border: 1px solid var(--error);
-  border-radius: 4px;
-  color: var(--error);
-  font-size: 0.85rem;
-}
-
-.actions {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.actions button {
-  width: 100%;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary {
-  background-color: var(--accent);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #005a9e;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-danger {
-  background-color: var(--error);
-  color: white;
-}
-
-.btn-danger:hover {
-  background-color: #d66b5a;
-}
-</style>

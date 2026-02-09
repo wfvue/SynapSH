@@ -21,143 +21,28 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <div class="tab-bar">
-        <div class="tab-list">
-            <div v-for="tab in tabs" :key="tab.id" class="tab-item" :class="{ active: tab.id === activeTabId }"
+    <div class="flex h-[38px] border-b border-white/10 select-none">
+        <!-- 交通灯按钮占位区域 - 完全透明，不可拖拽 -->
+        <div class="w-[80px] h-full shrink-0" style="-webkit-app-region: no-drag"></div>
+        <div class="flex flex-1 overflow-x-auto items-end bg-neutral-900 [&::-webkit-scrollbar]:hidden pl-4">
+            <div v-for="tab in tabs" :key="tab.id"
+                class="group flex items-center gap-2 px-3 min-w-[140px] max-w-[240px] h-8 bg-white text-neutral-400 rounded-t-md mr-0.5 cursor-default text-[13px] transition-all duration-200 ease-out relative hover:bg-neutral-700 hover:text-neutral-200"
+                :class="{ 'bg-[var(--background)] text-[var(--foreground)] shadow-[0_-2px_10px_rgba(0,0,0,0.2)] z-10': tab.id === activeTabId }"
                 @click="emit('switch-tab', tab.id)">
-                <span class="tab-icon" :class="tab.icon || 'icon-[mdi--terminal]'"></span>
-                <span class="tab-title">{{ tab.title }}</span>
-                <button class="close-btn" @click.stop="emit('close-tab', tab.id)">
+                <span class="text-base opacity-80" :class="tab.icon || 'icon-[mdi--terminal]'"></span>
+                <span class="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{{ tab.title }}</span>
+                <button
+                    class="close-btn flex items-center justify-center w-[18px] h-[18px] rounded-full border-none bg-transparent text-inherit opacity-0 cursor-pointer transition-all duration-200 group-hover:opacity-60 hover:!opacity-100 hover:bg-white/20"
+                    @click.stop="emit('close-tab', tab.id)">
                     <span class="icon-[mdi--close]"></span>
                 </button>
             </div>
-            <button class="new-tab-btn" @click="emit('new-tab')">
+            <button
+                class="flex items-center justify-center w-8 h-8 border-none bg-transparent text-neutral-400 cursor-pointer ml-1 rounded-md hover:bg-white/10 hover:text-white transition-colors"
+                @click="emit('new-tab')">
                 <span class="icon-[mdi--plus]"></span>
             </button>
         </div>
-        <div class="drag-region" data-tauri-drag-region></div>
+        <div class="flex-1 h-full" data-tauri-drag-region></div>
     </div>
 </template>
-
-<style scoped>
-.tab-bar {
-    display: flex;
-    height: 38px;
-    background: #18181b;
-    /* Zinc 900 */
-    border-bottom: 1px solid #27272a;
-    /* Zinc 800 */
-    user-select: none;
-    padding-left: 80px;
-    /* Space for traffic lights */
-}
-
-.tab-list {
-    display: flex;
-    flex: 1;
-    overflow-x: auto;
-    align-items: flex-end;
-    /* Align tabs to bottom */
-}
-
-/* Hide scrollbar */
-.tab-list::-webkit-scrollbar {
-    display: none;
-}
-
-.tab-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 12px;
-    min-width: 140px;
-    max-width: 240px;
-    height: 32px;
-    background: #27272a;
-    /* Inactive tab bg */
-    color: #a1a1aa;
-    /* Zinc 400 */
-    border-radius: 6px 6px 0 0;
-    margin-right: 2px;
-    cursor: default;
-    font-size: 13px;
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-.tab-item:hover {
-    background: #3f3f46;
-    /* Zinc 700 */
-    color: #e4e4e7;
-    /* Zinc 200 */
-}
-
-.tab-item.active {
-    background: var(--background);
-    /* Match app bg */
-    color: var(--foreground);
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
-    z-index: 10;
-}
-
-.tab-icon {
-    font-size: 16px;
-    opacity: 0.8;
-}
-
-.tab-title {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
-    color: inherit;
-    opacity: 0;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.tab-item:hover .close-btn {
-    opacity: 0.6;
-}
-
-.close-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    opacity: 1 !important;
-}
-
-.new-tab-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: transparent;
-    color: #a1a1aa;
-    cursor: pointer;
-    margin-left: 4px;
-    border-radius: 6px;
-}
-
-.new-tab-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-}
-
-.drag-region {
-    flex: 1;
-    /* Take up remaining space */
-    height: 100%;
-}
-</style>
