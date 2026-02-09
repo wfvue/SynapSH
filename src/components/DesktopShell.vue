@@ -13,6 +13,7 @@ import DesktopStatusBar from "./desktop/DesktopStatusBar.vue";
 import FilesApp from "./apps/FilesApp.vue";
 import ActivityMonitor from "./apps/ActivityMonitor.vue";
 import TextEditorApp from "./apps/TextEditorApp.vue";
+import SettingsApp from "./apps/SettingsApp.vue";
 
 type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser" | "editor";
 
@@ -200,6 +201,9 @@ onUnmounted(() => {
         <!-- 文本编辑器 -->
         <TextEditorApp v-else-if="app === 'editor' && editorFile" :session-id="sessionId" :file-path="editorFile.path"
           :file-name="editorFile.name" />
+
+        <!-- 系统设置 -->
+        <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" />
 
         <!-- 其他应用占位 -->
         <div v-else class="app-empty">
