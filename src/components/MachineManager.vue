@@ -477,7 +477,7 @@ onMounted(() => {
 /* Sidebar */
 .sidebar {
     width: 220px;
-    background: linear-gradient(180deg, rgba(18, 22, 32, 0.95) 0%, rgba(12, 16, 24, 0.98) 100%);
+    background: var(--machine-sidebar-bg);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
@@ -492,6 +492,7 @@ onMounted(() => {
     font-weight: bold;
     margin-bottom: 32px;
     padding: 8px;
+    color: var(--foreground);
 }
 
 .brand .logo {
@@ -518,14 +519,14 @@ onMounted(() => {
 }
 
 .nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.06);
-    color: var(--text-primary);
+    background-color: var(--accent);
+    color: var(--foreground);
 }
 
 .nav-item.active {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
-    color: var(--accent);
-    border-left: 3px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-color);
+    border-left: 3px solid var(--accent-color);
 }
 
 .sidebar-footer {
@@ -567,7 +568,7 @@ onMounted(() => {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 50%, #151922 100%);
+    background: var(--machine-main-bg);
     overflow: hidden;
 }
 
@@ -578,13 +579,14 @@ onMounted(() => {
     justify-content: space-between;
     padding: 0 24px;
     border-bottom: 1px solid var(--border);
-    background: rgba(0, 0, 0, 0.2);
+    background: transparent;
 }
 
 .breadcrumbs {
     display: flex;
     align-items: center;
     gap: 8px;
+    color: var(--foreground);
 }
 
 .crumb.active {
@@ -598,9 +600,9 @@ onMounted(() => {
 }
 
 .btn-refresh {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--secondary);
     border: 1px solid var(--border);
-    color: var(--text-primary);
+    color: var(--foreground);
     padding: 8px 16px;
     border-radius: 8px;
     cursor: pointer;
@@ -661,7 +663,7 @@ onMounted(() => {
 .search-box {
     display: flex;
     align-items: center;
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--machine-input-bg);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 0 14px;
@@ -671,19 +673,20 @@ onMounted(() => {
 }
 
 .search-box:focus-within {
-    border-color: var(--accent);
+    border-color: var(--accent-color);
     box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.1);
 }
 
 .search-box .icon {
     margin-right: 10px;
     opacity: 0.6;
+    color: var(--text-muted);
 }
 
 .search-box input {
     background: transparent;
     border: none;
-    color: white;
+    color: var(--machine-input-text);
     outline: none;
     width: 100%;
     font-size: 0.9rem;
@@ -729,7 +732,7 @@ onMounted(() => {
     width: 40px;
     height: 40px;
     border: 3px solid var(--border);
-    border-top-color: var(--accent);
+    border-top-color: var(--accent-color);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -747,7 +750,7 @@ onMounted(() => {
 
 .empty-state h3 {
     margin-bottom: 8px;
-    color: var(--text-primary);
+    color: var(--foreground);
 }
 
 /* Machine Grid */
@@ -761,17 +764,18 @@ onMounted(() => {
 }
 
 .machine-card {
-    background: linear-gradient(135deg, rgba(30, 35, 45, 0.8) 0%, rgba(25, 30, 40, 0.9) 100%);
+    background: var(--machine-card-bg);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 20px;
     transition: all 0.25s ease;
+    color: var(--foreground);
 }
 
 .machine-card:hover {
-    border-color: rgba(99, 102, 241, 0.4);
+    border-color: var(--accent-color);
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-soft);
 }
 
 .card-header {

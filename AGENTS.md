@@ -11,10 +11,11 @@ trigger: always_on
 | 前端框架 | Vue 3.6 + TypeScript |
 | 构建工具 | Vite 8 |
 | CSS 框架 | TailwindCSS v4 |
+| UI 组件 | shadcn-vue + Radix Vue |
 | 图标 | @iconify/tailwind4 (mdi, lucide, carbon) |
 | 终端 | xterm.js + xterm-addon-webgl + xterm-addon-fit |
 | 可视化 | ECharts |
-| 状态管理 | Pinia (待集成) |
+| 状态管理 | VueUse (主题/持久化) |
 | 后端 | Tauri v2 + tokio |
 | SSH | russh + russh-keys |
 | 文件传输 | russh-sftp |

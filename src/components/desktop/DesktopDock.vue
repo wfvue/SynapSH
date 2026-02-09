@@ -44,8 +44,8 @@ function handleClick(app: string | undefined) {
     gap: 4px;
     padding: 4px 8px;
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: var(--dock-bg);
+    border: 1px solid var(--dock-border);
     backdrop-filter: blur(24px);
     z-index: 4;
 }

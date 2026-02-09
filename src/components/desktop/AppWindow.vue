@@ -244,12 +244,12 @@ function startResize(e: MouseEvent, direction: string) {
     pointer-events: auto;
     position: absolute;
     border-radius: 18px;
-    background: rgba(14, 18, 28, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(var(--window-bg-base), var(--window-transparency, 0.88));
+    border: 1px solid var(--border-color);
     box-shadow: var(--shadow-strong);
     backdrop-filter: blur(20px);
     overflow: visible;
-    transition: box-shadow 0.2s ease;
+    transition: box-shadow 0.2s ease, background 0.3s ease;
     min-width: 400px;
     min-height: 300px;
 }

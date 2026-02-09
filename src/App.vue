@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
+import { useColorMode, useLocalStorage } from "@vueuse/core";
 import DesktopShell from "./components/DesktopShell.vue";
 import MachineManager from "./components/MachineManager.vue";
 
@@ -7,6 +8,28 @@ type ViewState = "machine-manager" | "desktop";
 
 const currentView = ref<ViewState>("machine-manager");
 const currentSession = ref<string>("");
+
+// 在根组件初始化主题模式
+const mode = useColorMode({
+  emitAuto: true,
+  storageKey: "vueuse-color-mode",
+  attribute: "class",
+  modes: {
+    dark: "dark",
+    light: "light",
+    auto: "auto",
+  },
+});
+
+// 读取强调色设置并应用为 CSS 变量
+const accentColor = useLocalStorage("appearance-accent-color", "#3b82f6");
+watch(
+  accentColor,
+  (color) => {
+    document.documentElement.style.setProperty("--accent-color", color);
+  },
+  { immediate: true }
+);
 
 function handleConnect(sessionId: string) {
   currentSession.value = sessionId;
@@ -35,24 +58,6 @@ function handleDisconnect() {
   box-sizing: border-box;
 }
 
-:root {
-  --wallpaper-a: #111827;
-  --wallpaper-b: #1f2937;
-  --wallpaper-c: #2b1f3b;
-  --bg-primary: #0f141f;
-  --bg-secondary: rgba(18, 24, 36, 0.9);
-  --bg-tertiary: rgba(28, 34, 48, 0.85);
-  --text-primary: #e6e9f2;
-  --text-secondary: #9aa3b2;
-  --text-muted: #a8b0c2;
-  --accent: #7dd3fc;
-  --border: rgba(255, 255, 255, 0.12);
-  --success: #5de4c7;
-  --error: #ff7a7a;
-  --icon-bg: rgba(255, 255, 255, 0.08);
-  --shadow-strong: 0 20px 60px rgba(0, 0, 0, 0.4);
-  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.25);
-}
 
 body {
   font-family: "Avenir Next", "Avenir", "PingFang SC", "HarmonyOS Sans SC",

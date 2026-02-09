@@ -1,16 +1,39 @@
 <!--
   AppearancePanel.vue - 外观设置面板
   设置主题、壁纸、强调色等外观配置
+  使用 shadcn-vue 组件和 VueUse 实现真实主题切换
 -->
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useColorMode, useLocalStorage } from "@vueuse/core";
+import { Slider } from "@/components/ui/slider";
 
-// 外观设置项
-const theme = ref<"dark" | "light" | "auto">("dark");
-const accentColor = ref("#3b82f6");
-const wallpaper = ref(0);
-const transparency = ref(80);
+// 使用 VueUse 的 useColorMode 管理主题（与 App.vue 同步）
+const mode = useColorMode({
+    emitAuto: true,
+    storageKey: "vueuse-color-mode",
+    attribute: "class",
+    modes: {
+        dark: "dark",
+        light: "light",
+        auto: "auto",
+    },
+});
 
+// 本地存储外观设置
+const accentColor = useLocalStorage("appearance-accent-color", "#3b82f6");
+const wallpaperId = useLocalStorage("appearance-wallpaper", 0);
+const customWallpapers = useLocalStorage<string[]>("appearance-custom-wallpapers", []);
+
+// 计算当前主题模式
+const theme = computed({
+    get: () => mode.value,
+    set: (value) => {
+        mode.value = value;
+    },
+});
+
+// 强调色选项
 const accentColors = [
     { value: "#3b82f6", name: "蓝色" },
     { value: "#8b5cf6", name: "紫色" },
@@ -21,12 +44,121 @@ const accentColors = [
     { value: "#06b6d4", name: "青色" },
 ];
 
-const wallpapers = [
-    { id: 0, name: "默认渐变", preview: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)" },
-    { id: 1, name: "深空蓝", preview: "linear-gradient(135deg, #0c1445 0%, #1a237e 100%)" },
-    { id: 2, name: "暗夜紫", preview: "linear-gradient(135deg, #1a0533 0%, #4a1259 100%)" },
-    { id: 3, name: "极光绿", preview: "linear-gradient(135deg, #0d2818 0%, #1b4332 100%)" },
+// 预设壁纸选项
+const presetWallpapers = [
+    { id: 0, name: "默认渐变", preview: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", type: "gradient" },
+    { id: 1, name: "深空蓝", preview: "linear-gradient(135deg, #0c1445 0%, #1a237e 100%)", type: "gradient" },
+    { id: 2, name: "暗夜紫", preview: "linear-gradient(135deg, #1a0533 0%, #4a1259 100%)", type: "gradient" },
+    { id: 3, name: "极光绿", preview: "linear-gradient(135deg, #0d2818 0%, #1b4332 100%)", type: "gradient" },
 ];
+
+// 合并预设和自定义壁纸
+const allWallpapers = computed(() => {
+    const custom = customWallpapers.value.map((url, index) => ({
+        id: 100 + index,
+        name: `自定义 ${index + 1}`,
+        preview: `url(${url})`,
+        type: "image" as const,
+        url,
+    }));
+    return [...presetWallpapers, ...custom];
+});
+
+// 壁纸拖拽上传
+const isDragging = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    isDragging.value = true;
+}
+
+function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    isDragging.value = false;
+}
+
+function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging.value = false;
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+        handleFiles(files);
+    }
+}
+
+function handleFileSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+        handleFiles(input.files);
+    }
+}
+
+function handleFiles(files: FileList) {
+    Array.from(files).forEach((file) => {
+        if (file.type.startsWith("image/")) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target?.result as string;
+                if (dataUrl) {
+                    customWallpapers.value = [...customWallpapers.value, dataUrl];
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+function removeCustomWallpaper(id: number) {
+    const index = id - 100;
+    if (index >= 0 && index < customWallpapers.value.length) {
+        customWallpapers.value = customWallpapers.value.filter((_, i) => i !== index);
+        // 如果删除的是当前壁纸，切换回默认
+        if (wallpaperId.value === id) {
+            wallpaperId.value = 0;
+        }
+    }
+}
+
+// 应用强调色到 CSS 变量
+function applyAccentColor(color: string) {
+    document.documentElement.style.setProperty("--accent-color", color);
+    accentColor.value = color;
+}
+
+// 应用壁纸
+function applyWallpaper(id: number) {
+    wallpaperId.value = id;
+    // 发送事件通知壁纸组件
+    const wallpaper = allWallpapers.value.find((w) => w.id === id);
+    window.dispatchEvent(
+        new CustomEvent("wallpaper-change", {
+            detail: { id, wallpaper },
+        })
+    );
+}
+
+// 初始化时应用设置
+watch(
+    accentColor,
+    (color) => {
+        document.documentElement.style.setProperty("--accent-color", color);
+    },
+    { immediate: true }
+);
+
+watch(
+    wallpaperId,
+    (id) => {
+        const wallpaper = allWallpapers.value.find((w) => w.id === id);
+        window.dispatchEvent(
+            new CustomEvent("wallpaper-change", {
+                detail: { id, wallpaper },
+            })
+        );
+    },
+    { immediate: true }
+);
 </script>
 
 <template>
@@ -65,7 +197,7 @@ const wallpapers = [
             <div class="accent-colors">
                 <div v-for="color in accentColors" :key="color.value" class="accent-color"
                     :class="{ active: accentColor === color.value }" :style="{ background: color.value }"
-                    :title="color.name" @click="accentColor = color.value">
+                    :title="color.name" @click="applyAccentColor(color.value)">
                     <span v-if="accentColor === color.value" class="icon-[mdi--check]"></span>
                 </div>
             </div>
@@ -74,26 +206,23 @@ const wallpapers = [
         <section class="settings-section">
             <h3 class="section-title">壁纸</h3>
 
-            <div class="wallpaper-grid">
-                <div v-for="wp in wallpapers" :key="wp.id" class="wallpaper-item"
-                    :class="{ active: wallpaper === wp.id }" :style="{ background: wp.preview }"
-                    @click="wallpaper = wp.id">
-                    <span class="wallpaper-name">{{ wp.name }}</span>
-                </div>
+            <!-- 拖拽上传区域 -->
+            <div class="wallpaper-upload" :class="{ dragging: isDragging }" @dragover="handleDragOver"
+                @dragleave="handleDragLeave" @drop="handleDrop" @click="fileInput?.click()">
+                <span class="icon-[mdi--cloud-upload-outline]"></span>
+                <span>拖拽图片到此处或点击上传</span>
+                <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="handleFileSelect" />
             </div>
-        </section>
 
-        <section class="settings-section">
-            <h3 class="section-title">透明度</h3>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">窗口透明度</span>
-                    <span class="setting-desc">调整窗口背景的透明程度</span>
-                </div>
-                <div class="slider-container">
-                    <input type="range" v-model="transparency" min="20" max="100" class="slider" />
-                    <span class="slider-value">{{ transparency }}%</span>
+            <div class="wallpaper-grid">
+                <div v-for="wp in allWallpapers" :key="wp.id" class="wallpaper-item"
+                    :class="{ active: wallpaperId === wp.id }" :style="{
+                        background: wp.type === 'image' ? `url(${(wp as any).url}) center/cover` : wp.preview,
+                    }" @click="applyWallpaper(wp.id)">
+                    <span class="wallpaper-name">{{ wp.name }}</span>
+                    <button v-if="wp.id >= 100" class="wallpaper-remove" @click.stop="removeCustomWallpaper(wp.id)">
+                        <span class="icon-[mdi--close]"></span>
+                    </button>
                 </div>
             </div>
         </section>
@@ -103,19 +232,19 @@ const wallpapers = [
 <style scoped>
 .settings-panel {
     padding: 24px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--foreground);
 }
 
 .panel-title {
     font-size: 1.5rem;
     font-weight: 600;
     margin: 0 0 4px 0;
-    color: #fff;
+    color: var(--foreground);
 }
 
 .panel-subtitle {
     font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--muted-foreground);
     margin: 0 0 24px 0;
 }
 
@@ -128,7 +257,7 @@ const wallpapers = [
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--muted-foreground);
     margin: 0 0 12px 0;
 }
 
@@ -145,7 +274,7 @@ const wallpapers = [
     align-items: center;
     gap: 8px;
     padding: 16px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--secondary);
     border: 2px solid transparent;
     border-radius: 12px;
     cursor: pointer;
@@ -153,12 +282,12 @@ const wallpapers = [
 }
 
 .theme-option:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--accent);
 }
 
 .theme-option.active {
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--accent-color);
+    background: var(--accent);
 }
 
 .theme-preview {
@@ -182,7 +311,7 @@ const wallpapers = [
 
 .auto-preview {
     background: linear-gradient(135deg, #f0f0f0 0%, #2d2d3d 100%);
-    color: #fff;
+    color: var(--foreground);
 }
 
 .theme-label {
@@ -215,8 +344,36 @@ const wallpapers = [
 }
 
 .accent-color.active {
-    border-color: rgba(255, 255, 255, 0.5);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+    border-color: var(--foreground);
+    box-shadow: 0 0 0 2px var(--background);
+}
+
+/* Wallpaper Upload */
+.wallpaper-upload {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    margin-bottom: 12px;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--muted-foreground);
+    background: var(--secondary);
+}
+
+.wallpaper-upload:hover,
+.wallpaper-upload.dragging {
+    border-color: var(--accent-color);
+    background: var(--accent);
+    color: var(--foreground);
+}
+
+.wallpaper-upload span:first-child {
+    font-size: 32px;
 }
 
 /* Wallpaper Grid */
@@ -227,6 +384,7 @@ const wallpapers = [
 }
 
 .wallpaper-item {
+    position: relative;
     height: 80px;
     border-radius: 10px;
     cursor: pointer;
@@ -242,7 +400,7 @@ const wallpapers = [
 }
 
 .wallpaper-item.active {
-    border-color: #3b82f6;
+    border-color: var(--accent-color);
 }
 
 .wallpaper-name {
@@ -252,13 +410,39 @@ const wallpapers = [
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+.wallpaper-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.wallpaper-item:hover .wallpaper-remove {
+    opacity: 1;
+}
+
+.wallpaper-remove:hover {
+    background: rgba(239, 68, 68, 0.8);
+}
+
 /* Setting Item */
 .setting-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--secondary);
     border-radius: 10px;
 }
 
@@ -275,7 +459,7 @@ const wallpapers = [
 
 .setting-desc {
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--muted-foreground);
 }
 
 /* Slider */
@@ -285,32 +469,9 @@ const wallpapers = [
     gap: 12px;
 }
 
-.slider {
-    width: 120px;
-    height: 4px;
-    -webkit-appearance: none;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    outline: none;
-}
-
-.slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: #3b82f6;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.slider::-webkit-slider-thumb:hover {
-    transform: scale(1.2);
-}
-
 .slider-value {
     font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--muted-foreground);
     min-width: 40px;
     text-align: right;
 }

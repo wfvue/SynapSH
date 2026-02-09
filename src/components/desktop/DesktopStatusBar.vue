@@ -58,8 +58,8 @@ onUnmounted(() => {
     gap: 12px;
     padding: 10px 14px;
     border-radius: 16px;
-    background: rgba(12, 16, 24, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--statusbar-bg);
+    border: 1px solid var(--border-color);
     backdrop-filter: blur(16px);
     z-index: 4;
     color: var(--text-muted);

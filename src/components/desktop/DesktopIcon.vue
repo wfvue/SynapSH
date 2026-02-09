@@ -52,11 +52,11 @@ function handleDblClick() {
 }
 
 .desktop-icon.selected {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--icon-bg);
 }
 
 .desktop-icon:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--icon-bg);
 }
 
 .icon-wrapper {
