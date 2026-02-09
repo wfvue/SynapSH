@@ -1,3 +1,7 @@
+<!--
+  MemoryChart.vue - 内存使用率图表组件
+  使用 ECharts 展示内存使用环形图
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
@@ -104,138 +108,34 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="memory-chart">
-        <div class="chart-header">
-            <span class="chart-title">内存使用率</span>
-            <span class="chart-value">{{ usedPercent }}%</span>
+    <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
+        <div class="flex justify-between items-center mb-2">
+            <span class="text-sm font-medium text-foreground/80">内存使用率</span>
+            <span class="text-xl font-semibold text-amber-400">{{ usedPercent }}%</span>
         </div>
-        <div class="chart-wrapper">
-            <div ref="chartRef" class="chart-container"></div>
-            <div class="chart-center">
-                <div class="center-value">{{ formatBytes(used) }}</div>
-                <div class="center-label">已使用</div>
+        <div class="relative flex-1 min-h-[160px]">
+            <div ref="chartRef" class="w-full h-full"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                <div class="text-base font-semibold text-foreground">{{ formatBytes(used) }}</div>
+                <div class="text-[0.7rem] text-muted-foreground">已使用</div>
             </div>
         </div>
-        <div class="memory-legend">
-            <div class="legend-item">
-                <span class="legend-dot legend-dot--used"></span>
-                <span class="legend-label">已使用</span>
-                <span class="legend-value">{{ formatBytes(used) }}</span>
+        <div class="flex justify-around mt-2 pt-3 border-t border-border/30">
+            <div class="flex flex-col items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-gradient-to-br from-amber-500 to-amber-300"></span>
+                <span class="text-[0.7rem] text-muted-foreground">已使用</span>
+                <span class="text-xs text-foreground/80 font-medium">{{ formatBytes(used) }}</span>
             </div>
-            <div class="legend-item">
-                <span class="legend-dot legend-dot--cached"></span>
-                <span class="legend-label">缓存</span>
-                <span class="legend-value">{{ formatBytes(cached) }}</span>
+            <div class="flex flex-col items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-blue-500/60"></span>
+                <span class="text-[0.7rem] text-muted-foreground">缓存</span>
+                <span class="text-xs text-foreground/80 font-medium">{{ formatBytes(cached) }}</span>
             </div>
-            <div class="legend-item">
-                <span class="legend-dot legend-dot--free"></span>
-                <span class="legend-label">可用</span>
-                <span class="legend-value">{{ formatBytes(free) }}</span>
+            <div class="flex flex-col items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-white/20"></span>
+                <span class="text-[0.7rem] text-muted-foreground">可用</span>
+                <span class="text-xs text-foreground/80 font-medium">{{ formatBytes(free) }}</span>
             </div>
         </div>
     </div>
 </template>
-
-<style scoped>
-.memory-chart {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 16px;
-    padding: 16px;
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.chart-title {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
-}
-
-.chart-value {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #fbbf24;
-}
-
-.chart-wrapper {
-    position: relative;
-    flex: 1;
-    min-height: 160px;
-}
-
-.chart-container {
-    width: 100%;
-    height: 100%;
-}
-
-.chart-center {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-}
-
-.center-value {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #fff;
-}
-
-.center-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.memory-legend {
-    display: flex;
-    justify-content: space-around;
-    margin-top: 8px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.legend-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.legend-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.legend-dot--used {
-    background: linear-gradient(135deg, #f59e0b, #fbbf24);
-}
-
-.legend-dot--cached {
-    background: rgba(59, 130, 246, 0.6);
-}
-
-.legend-dot--free {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.legend-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.legend-value {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.8);
-    font-weight: 500;
-}
-</style>

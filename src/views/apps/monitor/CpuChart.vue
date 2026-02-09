@@ -1,3 +1,7 @@
+<!--
+  CpuChart.vue - CPU 使用率图表组件
+  使用 ECharts 展示 CPU 历史使用率曲线
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
@@ -112,96 +116,23 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="cpu-chart">
-        <div class="chart-header">
-            <div class="chart-title-section">
-                <span class="chart-title">CPU 使用率</span>
-                <span v-if="coreCount" class="core-info">{{ coreCount }} 核</span>
+    <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
+        <div class="flex justify-between items-center mb-3">
+            <div class="flex items-center gap-2.5">
+                <span class="text-sm font-medium text-foreground/80">CPU 使用率</span>
+                <span v-if="coreCount" class="text-[0.7rem] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{{ coreCount }} 核</span>
             </div>
-            <div class="chart-stats">
-                <div class="stat-item">
-                    <span class="stat-label">当前</span>
-                    <span class="stat-value current">{{ currentValue }}%</span>
+            <div class="flex gap-4">
+                <div class="flex flex-col items-end gap-0.5">
+                    <span class="text-[0.65rem] text-muted-foreground uppercase">当前</span>
+                    <span class="text-[1.1rem] font-semibold text-emerald-400 font-mono">{{ currentValue }}%</span>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-label">平均</span>
-                    <span class="stat-value">{{ avgValue }}%</span>
+                <div class="flex flex-col items-end gap-0.5">
+                    <span class="text-[0.65rem] text-muted-foreground uppercase">平均</span>
+                    <span class="text-[0.9rem] font-semibold text-foreground/70 font-mono">{{ avgValue }}%</span>
                 </div>
             </div>
         </div>
-        <div ref="chartRef" class="chart-container"></div>
+        <div ref="chartRef" class="flex-1 min-h-[150px]"></div>
     </div>
 </template>
-
-<style scoped>
-.cpu-chart {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 16px;
-    padding: 16px;
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.chart-title-section {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.chart-title {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
-}
-
-.core-info {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 2px 8px;
-    border-radius: 4px;
-}
-
-.chart-stats {
-    display: flex;
-    gap: 16px;
-}
-
-.stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-}
-
-.stat-label {
-    font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.4);
-    text-transform: uppercase;
-}
-
-.stat-value {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
-    font-family: monospace;
-}
-
-.stat-value.current {
-    font-size: 1.1rem;
-    color: #34d399;
-}
-
-.chart-container {
-    flex: 1;
-    min-height: 150px;
-}
-</style>

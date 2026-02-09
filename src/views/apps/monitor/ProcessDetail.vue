@@ -1,3 +1,7 @@
+<!--
+  ProcessDetail.vue - 进程详情抽屉组件
+  展示进程详细信息，支持进程操作（终止、暂停、恢复）
+-->
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import type { ProcessInfo } from "./ProcessList.vue";
@@ -78,124 +82,140 @@ function handleBackdropClick(e: MouseEvent) {
 <template>
     <Teleport to="body">
         <Transition name="drawer">
-            <div v-if="visible && process" class="drawer-overlay" @click="handleBackdropClick">
-                <div class="drawer-panel">
-                    <div class="drawer-header">
-                        <div class="process-title">
-                            <span class="process-icon-large">{{ process.name.charAt(0).toUpperCase() }}</span>
-                            <div class="process-title-text">
-                                <h3 class="process-name">{{ process.name }}</h3>
-                                <span class="process-pid">PID: {{ process.pid }}</span>
+            <div v-if="visible && process" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end"
+                @click="handleBackdropClick">
+                <div
+                    class="w-[420px] h-full bg-gradient-to-b from-[#0e121c] to-[#151b2b] border-l border-white/[0.06] flex flex-col shadow-[-8px_0_32px_rgba(0,0,0,0.4)]">
+                    <div class="flex justify-between items-center p-5 border-b border-white/[0.06]">
+                        <div class="flex items-center gap-3">
+                            <span
+                                class="w-12 h-12 bg-gradient-to-br from-sky-400/30 to-sky-400/10 rounded-xl flex items-center justify-center text-2xl font-bold text-sky-400">{{ process.name.charAt(0).toUpperCase() }}</span>
+                            <div class="flex flex-col gap-0.5">
+                                <h3 class="text-lg font-semibold text-foreground/90">{{ process.name }}</h3>
+                                <span class="text-xs text-muted-foreground font-mono">PID: {{ process.pid }}</span>
                             </div>
                         </div>
-                        <button class="close-btn" @click="handleClose">
+                        <button
+                            class="w-9 h-9 rounded-xl bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground/80 flex items-center justify-center text-lg transition-colors"
+                            @click="handleClose">
                             <span class="icon-[mdi--close]"></span>
                         </button>
                     </div>
 
-                    <div class="drawer-content">
+                    <div class="flex-1 overflow-y-auto p-5">
                         <!-- 状态概览 -->
-                        <div class="status-overview">
-                            <div class="status-item">
-                                <span class="status-label">状态</span>
-                                <span class="status-value" :style="{ color: getStatusColor(process.status) }">
+                        <div class="grid grid-cols-3 gap-3 mb-6">
+                            <div class="bg-white/[0.03] border border-white/[0.05] rounded-xl p-4 text-center">
+                                <span class="block text-[0.7rem] text-muted-foreground uppercase tracking-wider mb-1.5">状态</span>
+                                <span class="block text-xl font-semibold" :style="{ color: getStatusColor(process.status) }">
                                     {{ process.statusDesc }}
                                 </span>
                             </div>
-                            <div class="status-item">
-                                <span class="status-label">CPU</span>
-                                <span class="status-value" :class="{ high: process.cpu > 50 }">
+                            <div class="bg-white/[0.03] border border-white/[0.05] rounded-xl p-4 text-center">
+                                <span class="block text-[0.7rem] text-muted-foreground uppercase tracking-wider mb-1.5">CPU</span>
+                                <span class="block text-xl font-semibold"
+                                    :class="process.cpu > 50 ? 'text-amber-500' : 'text-foreground/90'">
                                     {{ process.cpu.toFixed(1) }}%
                                 </span>
                             </div>
-                            <div class="status-item">
-                                <span class="status-label">内存</span>
-                                <span class="status-value" :class="{ high: process.memory > 50 }">
+                            <div class="bg-white/[0.03] border border-white/[0.05] rounded-xl p-4 text-center">
+                                <span class="block text-[0.7rem] text-muted-foreground uppercase tracking-wider mb-1.5">内存</span>
+                                <span class="block text-xl font-semibold"
+                                    :class="process.memory > 50 ? 'text-amber-500' : 'text-foreground/90'">
                                     {{ process.memory.toFixed(1) }}%
                                 </span>
                             </div>
                         </div>
 
                         <!-- 详细信息网格 -->
-                        <div class="detail-section">
-                            <h4 class="section-title">
-                                <span class="icon-[mdi--information-outline]"></span>
+                        <div class="mb-6">
+                            <h4 class="flex items-center gap-2 text-sm font-medium text-foreground/70 mb-3 pb-2 border-b border-white/[0.05]">
+                                <span class="icon-[mdi--information-outline] text-base text-sky-400/70"></span>
                                 基本信息
                             </h4>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <span class="detail-label">进程 ID</span>
-                                    <span class="detail-value">{{ process.pid }}</span>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">进程 ID</span>
+                                    <span class="text-sm text-foreground/80 font-mono">{{ process.pid }}</span>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">用户</span>
-                                    <span class="detail-value">{{ process.user }}</span>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">用户</span>
+                                    <span class="text-sm text-foreground/80">{{ process.user }}</span>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">状态</span>
-                                    <span class="detail-value">{{ process.statusDesc }} ({{ process.status }})</span>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">状态</span>
+                                    <span class="text-sm text-foreground/80">{{ process.statusDesc }} ({{ process.status }})</span>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">启动时间</span>
-                                    <span class="detail-value">{{ process.startTime }}</span>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">启动时间</span>
+                                    <span class="text-sm text-foreground/80">{{ process.startTime }}</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 内存信息 -->
-                        <div class="detail-section">
-                            <h4 class="section-title">
-                                <span class="icon-[mdi--memory]"></span>
+                        <div class="mb-6">
+                            <h4 class="flex items-center gap-2 text-sm font-medium text-foreground/70 mb-3 pb-2 border-b border-white/[0.05]">
+                                <span class="icon-[mdi--memory] text-base text-sky-400/70"></span>
                                 内存使用
                             </h4>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <span class="detail-label">物理内存 (RSS)</span>
-                                    <span class="detail-value">{{ formatBytes(process.rss) }}</span>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">物理内存 (RSS)</span>
+                                    <span class="text-sm text-foreground/80 font-mono">{{ formatBytes(process.rss) }}</span>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">虚拟内存 (VSZ)</span>
-                                    <span class="detail-value">{{ formatBytes(process.vsz) }}</span>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">虚拟内存 (VSZ)</span>
+                                    <span class="text-sm text-foreground/80 font-mono">{{ formatBytes(process.vsz) }}</span>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">内存占比</span>
-                                    <span class="detail-value">{{ process.memory.toFixed(2) }}%</span>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[0.7rem] text-muted-foreground">内存占比</span>
+                                    <span class="text-sm text-foreground/80 font-mono">{{ process.memory.toFixed(2) }}%</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 命令行 -->
-                        <div class="detail-section">
-                            <h4 class="section-title">
-                                <span class="icon-[mdi--console]"></span>
+                        <div class="mb-6">
+                            <h4 class="flex items-center gap-2 text-sm font-medium text-foreground/70 mb-3 pb-2 border-b border-white/[0.05]">
+                                <span class="icon-[mdi--console] text-base text-sky-400/70"></span>
                                 命令行
                             </h4>
-                            <div class="command-box">
-                                <code>{{ process.command }}</code>
+                            <div class="bg-black/30 border border-white/[0.06] rounded-xl p-3 overflow-x-auto">
+                                <code
+                                    class="font-mono text-xs text-sky-400/90 leading-relaxed break-all">{{ process.command }}</code>
                             </div>
                         </div>
 
                         <!-- 操作按钮 -->
-                        <div class="detail-section">
-                            <h4 class="section-title">
-                                <span class="icon-[mdi--cog-outline]"></span>
+                        <div class="mb-6">
+                            <h4 class="flex items-center gap-2 text-sm font-medium text-foreground/70 mb-3 pb-2 border-b border-white/[0.05]">
+                                <span class="icon-[mdi--cog-outline] text-base text-sky-400/70"></span>
                                 进程操作
                             </h4>
-                            <div class="action-buttons">
-                                <button class="action-btn btn-terminate" @click="handleKill(15)">
-                                    <span class="icon-[mdi--close]"></span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button
+                                    class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                                    @click="handleKill(15)">
+                                    <span class="icon-[mdi--close] text-sm"></span>
                                     终止进程 (SIGTERM)
                                 </button>
-                                <button class="action-btn btn-force-kill" @click="handleKill(9)">
-                                    <span class="icon-[mdi--lightning-bolt]"></span>
+                                <button
+                                    class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors"
+                                    @click="handleKill(9)">
+                                    <span class="icon-[mdi--lightning-bolt] text-sm"></span>
                                     强制终止 (SIGKILL)
                                 </button>
-                                <button class="action-btn btn-pause" @click="handleKill(19)">
-                                    <span class="icon-[mdi--pause]"></span>
+                                <button
+                                    class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-medium bg-sky-400/10 text-sky-400 hover:bg-sky-400/20 transition-colors"
+                                    @click="handleKill(19)">
+                                    <span class="icon-[mdi--pause] text-sm"></span>
                                     暂停 (SIGSTOP)
                                 </button>
-                                <button class="action-btn btn-resume" @click="handleKill(18)">
-                                    <span class="icon-[mdi--play]"></span>
+                                <button
+                                    class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                                    @click="handleKill(18)">
+                                    <span class="icon-[mdi--play] text-sm"></span>
                                     恢复 (SIGCONT)
                                 </button>
                             </div>
@@ -208,256 +228,6 @@ function handleBackdropClick(e: MouseEvent) {
 </template>
 
 <style scoped>
-.drawer-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    z-index: 1000;
-    display: flex;
-    justify-content: flex-end;
-}
-
-.drawer-panel {
-    width: 420px;
-    height: 100%;
-    background: linear-gradient(180deg, #0e121c 0%, #151b2b 100%);
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
-    display: flex;
-    flex-direction: column;
-    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
-}
-
-.drawer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.process-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.process-icon-large {
-    width: 48px;
-    height: 48px;
-    background: linear-gradient(135deg, rgba(125, 211, 252, 0.3), rgba(125, 211, 252, 0.1));
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #7dd3fc;
-}
-
-.process-title-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.process-name {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin: 0;
-}
-
-.process-pid {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.4);
-    font-family: monospace;
-}
-
-.close-btn {
-    width: 36px;
-    height: 36px;
-    border: none;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    transition: all 0.2s;
-}
-
-.close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.drawer-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-}
-
-.status-overview {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 24px;
-}
-
-.status-item {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 16px;
-    text-align: center;
-}
-
-.status-label {
-    display: block;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.4);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
-}
-
-.status-value {
-    display: block;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.status-value.high {
-    color: #f59e0b;
-}
-
-.detail-section {
-    margin-bottom: 24px;
-}
-
-.section-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.7);
-    margin: 0 0 12px 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.section-title span {
-    font-size: 1rem;
-    color: rgba(125, 211, 252, 0.7);
-}
-
-.detail-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-}
-
-.detail-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.detail-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.detail-value {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.8);
-    font-family: monospace;
-}
-
-.command-box {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    padding: 12px;
-    overflow-x: auto;
-}
-
-.command-box code {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 0.75rem;
-    color: rgba(125, 211, 252, 0.9);
-    line-height: 1.5;
-    word-break: break-all;
-}
-
-.action-buttons {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-}
-
-.action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 12px;
-    border: none;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.action-btn span {
-    font-size: 0.9rem;
-}
-
-.btn-terminate {
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-}
-
-.btn-terminate:hover {
-    background: rgba(255, 107, 107, 0.2);
-}
-
-.btn-force-kill {
-    background: rgba(245, 158, 11, 0.1);
-    color: #fbbf24;
-}
-
-.btn-force-kill:hover {
-    background: rgba(245, 158, 11, 0.2);
-}
-
-.btn-pause {
-    background: rgba(125, 211, 252, 0.1);
-    color: #7dd3fc;
-}
-
-.btn-pause:hover {
-    background: rgba(125, 211, 252, 0.2);
-}
-
-.btn-resume {
-    background: rgba(16, 185, 129, 0.1);
-    color: #34d399;
-}
-
-.btn-resume:hover {
-    background: rgba(16, 185, 129, 0.2);
-}
-
 /* 过渡动画 */
 .drawer-enter-active,
 .drawer-leave-active {
@@ -469,13 +239,13 @@ function handleBackdropClick(e: MouseEvent) {
     opacity: 0;
 }
 
-.drawer-enter-active .drawer-panel,
-.drawer-leave-active .drawer-panel {
+.drawer-enter-active>div,
+.drawer-leave-active>div {
     transition: transform 0.3s ease;
 }
 
-.drawer-enter-from .drawer-panel,
-.drawer-leave-to .drawer-panel {
+.drawer-enter-from>div,
+.drawer-leave-to>div {
     transform: translateX(100%);
 }
 </style>

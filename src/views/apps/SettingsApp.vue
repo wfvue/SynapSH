@@ -9,6 +9,7 @@ import AppearancePanel from "./settings/AppearancePanel.vue";
 import TerminalPanel from "./settings/TerminalPanel.vue";
 import ConnectionPanel from "./settings/ConnectionPanel.vue";
 import AboutPanel from "./settings/AboutPanel.vue";
+import TrafficLights from "@/components/desktop/TrafficLights.vue";
 import { Input } from "@/components/ui/input";
 
 defineProps<{
@@ -53,26 +54,11 @@ const currentPanelLabel = computed(() => {
         <aside class="flex flex-col bg-muted/30 border-r border-border backdrop-blur-xl pt-3">
             <div class="px-4 pb-2 flex flex-col gap-3 drag-region" @mousedown="startDrag">
                 <!-- Mac Traffic Lights -->
-                <div class="flex gap-2 group">
-                    <button
-                        class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
-                        @click.stop="close">
-                        <span
-                            class="opacity-0 group-hover:opacity-100 text-[8px] font-bold text-black/50 leading-none">×</span>
-                    </button>
-                    <button
-                        class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
-                        @click.stop="minimize">
-                        <span
-                            class="opacity-0 group-hover:opacity-100 text-[8px] font-bold text-black/50 leading-none">−</span>
-                    </button>
-                    <button
-                        class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
-                        @click.stop="maximize">
-                        <span
-                            class="opacity-0 group-hover:opacity-100 text-[8px] font-bold text-black/50 leading-none">+</span>
-                    </button>
-                </div>
+                <TrafficLights
+                    @close="close?.()"
+                    @minimize="minimize?.()"
+                    @maximize="maximize?.()"
+                />
 
                 <div class="relative px-2 pb-2">
                     <span

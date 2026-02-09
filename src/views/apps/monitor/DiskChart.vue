@@ -1,3 +1,7 @@
+<!--
+  DiskChart.vue - 磁盘使用图表组件
+  使用 ECharts 展示磁盘分区使用情况
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
@@ -120,45 +124,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="disk-chart">
-        <div class="chart-header">
-            <span class="chart-title">磁盘使用</span>
-            <span class="chart-subtitle">{{ disks.length }} 个分区</span>
+    <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
+        <div class="flex justify-between items-center mb-3">
+            <span class="text-sm font-medium text-foreground/80">磁盘使用</span>
+            <span class="text-xs text-muted-foreground">{{ disks.length }} 个分区</span>
         </div>
-        <div ref="chartRef" class="chart-container"></div>
+        <div ref="chartRef" class="flex-1 min-h-[150px]"></div>
     </div>
 </template>
-
-<style scoped>
-.disk-chart {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 16px;
-    padding: 16px;
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.chart-title {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
-}
-
-.chart-subtitle {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.chart-container {
-    flex: 1;
-    min-height: 150px;
-}
-</style>

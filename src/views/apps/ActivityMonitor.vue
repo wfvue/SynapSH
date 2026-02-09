@@ -1,3 +1,7 @@
+<!--
+  ActivityMonitor.vue - 活动监视器应用
+  系统资源监控面板，支持 CPU、内存、磁盘、网络和进程监控
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
@@ -8,6 +12,7 @@ import NetworkChart from "./monitor/NetworkChart.vue";
 import ProcessList, { type ProcessInfo } from "./monitor/ProcessList.vue";
 import ProcessDetail from "./monitor/ProcessDetail.vue";
 import SystemOverview from "./monitor/SystemOverview.vue";
+import { AlertCircle, RefreshCw } from "lucide-vue-next";
 
 const props = defineProps<{
     sessionId: string;
@@ -159,208 +164,81 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="activity-monitor">
+    <div class="flex-1 flex h-full min-h-0 bg-background">
         <!-- 连接状态提示 -->
-        <div v-if="connectionStatus === 'error'" class="connection-alert">
-            <span class="icon-[mdi--alert-circle] alert-icon"></span>
-            <span class="alert-text">{{ errorMessage }}</span>
-            <button class="retry-btn" @click="refreshData">
-                <span class="icon-[mdi--refresh]"></span> 重试
+        <div v-if="connectionStatus === 'error'"
+            class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-4 py-2.5 bg-destructive/90 rounded-lg text-white text-sm z-50 shadow-lg">
+            <AlertCircle class="w-4.5 h-4.5" />
+            <span>{{ errorMessage }}</span>
+            <button
+                class="flex items-center gap-1 px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded text-xs transition-colors"
+                @click="refreshData">
+                <RefreshCw class="w-3.5 h-3.5" />
+                重试
             </button>
         </div>
 
         <!-- 侧边栏 -->
-        <aside class="monitor-sidebar">
-            <div v-for="tab in tabs" :key="tab.id" class="tab-item" :class="{ active: activeTab === tab.id }"
+        <aside class="w-[140px] flex flex-col p-2 bg-muted/30 border-r border-border overflow-y-auto">
+            <div v-for="tab in tabs" :key="tab.id"
+                class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer text-sm transition-colors"
+                :class="activeTab === tab.id
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'"
                 @click="activeTab = tab.id">
-                <span :class="tab.icon"></span>
-                <span class="tab-label">{{ tab.label }}</span>
+                <span :class="tab.icon" class="text-lg"></span>
+                <span>{{ tab.label }}</span>
             </div>
         </aside>
 
         <!-- 内容区 -->
-        <main class="monitor-content">
+        <main class="flex-1 p-4 overflow-y-auto">
             <!-- 概览页 -->
-            <div v-if="activeTab === 'overview'" class="tab-panel overview-panel">
+            <div v-if="activeTab === 'overview'" class="flex flex-col gap-4">
                 <SystemOverview :hostname="systemInfo.hostname" :uptime="systemInfo.uptime"
                     :load-average="systemInfo.loadAverage" :cpu-cores="systemInfo.cpuCores"
                     :kernel-version="systemInfo.kernelVersion" :total-memory="systemInfo.totalMemory" />
-                <div class="overview-charts">
+                <div class="grid grid-cols-2 gap-4">
                     <CpuChart :cpu-data="cpuHistory" :core-count="systemInfo.cpuCores" />
                     <MemoryChart :total="memoryData.total" :used="memoryData.used" :free="memoryData.free"
                         :cached="memoryData.cached" />
                 </div>
-                <div class="overview-charts">
+                <div class="grid grid-cols-2 gap-4">
                     <NetworkChart :rx-data="networkRxHistory" :tx-data="networkTxHistory" />
                     <DiskChart :disks="diskData" />
                 </div>
             </div>
 
             <!-- CPU 页 -->
-            <div v-else-if="activeTab === 'cpu'" class="tab-panel">
+            <div v-else-if="activeTab === 'cpu'" class="h-full">
                 <CpuChart :cpu-data="cpuHistory" :core-count="systemInfo.cpuCores" />
             </div>
 
             <!-- 内存页 -->
-            <div v-else-if="activeTab === 'memory'" class="tab-panel">
+            <div v-else-if="activeTab === 'memory'" class="h-full">
                 <MemoryChart :total="memoryData.total" :used="memoryData.used" :free="memoryData.free"
                     :cached="memoryData.cached" />
             </div>
 
             <!-- 磁盘页 -->
-            <div v-else-if="activeTab === 'disk'" class="tab-panel">
+            <div v-else-if="activeTab === 'disk'" class="h-full">
                 <DiskChart :disks="diskData" />
             </div>
 
             <!-- 网络页 -->
-            <div v-else-if="activeTab === 'network'" class="tab-panel">
+            <div v-else-if="activeTab === 'network'" class="h-full">
                 <NetworkChart :rx-data="networkRxHistory" :tx-data="networkTxHistory" />
             </div>
 
             <!-- 进程页 -->
-            <div v-else-if="activeTab === 'processes'" class="tab-panel">
-                <ProcessList 
-                    :processes="processes" 
-                    :session-id="sessionId"
-                    @view-detail="handleViewDetail" 
-                />
+            <div v-else-if="activeTab === 'processes'" class="h-full">
+                <ProcessList :processes="processes" :session-id="sessionId" @view-detail="handleViewDetail" />
             </div>
         </main>
 
         <!-- 进程详情抽屉 -->
-        <ProcessDetail
-            :process="selectedProcess"
-            :session-id="sessionId"
-            :visible="detailVisible"
-            @close="handleCloseDetail"
-            @killed="handleProcessKilled"
-        />
+        <ProcessDetail :process="selectedProcess" :session-id="sessionId" :visible="detailVisible"
+            @close="handleCloseDetail" @killed="handleProcessKilled" />
     </div>
 </template>
 
-<style scoped>
-.activity-monitor {
-    height: 100%;
-    display: grid;
-    grid-template-columns: 140px 1fr;
-    background: rgba(14, 18, 28, 0.5);
-    border-radius: 0 0 16px 16px;
-    overflow: hidden;
-}
-
-.connection-alert {
-    position: absolute;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    background: rgba(239, 68, 68, 0.9);
-    border-radius: 8px;
-    color: white;
-    font-size: 0.85rem;
-    z-index: 100;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.alert-icon {
-    font-size: 18px;
-}
-
-.retry-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    border-radius: 4px;
-    color: white;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.retry-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.monitor-sidebar {
-    display: flex;
-    flex-direction: column;
-    padding: 12px 8px;
-    background: rgba(0, 0, 0, 0.2);
-    border-right: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.tab-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.5);
-    transition: background 0.2s, color 0.2s;
-}
-
-.tab-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.tab-item.active {
-    background: rgba(125, 211, 252, 0.12);
-    color: #7dd3fc;
-}
-
-.tab-item span:first-child {
-    font-size: 18px;
-}
-
-.tab-label {
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-.monitor-content {
-    padding: 16px;
-    overflow-y: auto;
-}
-
-.tab-panel {
-    height: 100%;
-}
-
-.overview-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    min-height: 100%;
-}
-
-.overview-charts {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    height: 260px;
-    min-height: 260px;
-}
-
-.overview-charts > * {
-    height: 100%;
-    min-height: 240px;
-}
-
-@media (max-width: 900px) {
-    .overview-charts {
-        grid-template-columns: 1fr;
-        height: auto;
-    }
-    .overview-charts > * {
-        min-height: 200px;
-    }
-}
-</style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from "vue";
+import TrafficLights from "./TrafficLights.vue";
 
 const props = defineProps<{
     title: string;
@@ -228,17 +229,11 @@ function startResize(e: MouseEvent, direction: string) {
         <header v-if="!customChrome"
             class="grid grid-cols-[120px_1fr_160px] items-center px-4 py-3 border-b border-white/5 bg-[#121620]/80 rounded-t-[18px] select-none cursor-grab active:cursor-grabbing"
             @mousedown="startDrag">
-            <div class="flex gap-2">
-                <button
-                    class="w-3 h-3 rounded-full border-none bg-white/25 cursor-pointer transition-transform hover:scale-110 bg-[#ff6b6b]"
-                    @click.stop="emit('close')"></button>
-                <button
-                    class="w-3 h-3 rounded-full border-none bg-white/25 cursor-pointer transition-transform hover:scale-110 bg-[#ffd166]"
-                    @click.stop="emit('minimize')"></button>
-                <button
-                    class="w-3 h-3 rounded-full border-none bg-white/25 cursor-pointer transition-transform hover:scale-110 bg-[#9ae66e]"
-                    @click.stop="emit('maximize')"></button>
-            </div>
+            <TrafficLights
+                @close="emit('close')"
+                @minimize="emit('minimize')"
+                @maximize="emit('maximize')"
+            />
             <div class="text-center text-[0.9rem] tracking-[0.08em] text-muted-foreground uppercase">{{ title }}</div>
             <div class="flex justify-end">
                 <span v-if="statusText"
@@ -249,7 +244,7 @@ function startResize(e: MouseEvent, direction: string) {
             </div>
         </header>
 
-        <div class="overflow-auto rounded-b-[18px]" :class="[
+        <div class="overflow-auto rounded-b-[18px] flex flex-col" :class="[
             customChrome ? 'h-full rounded-[18px]' : 'h-[calc(100%-48px)]',
             { 'pointer-events-none': isResizing || isDragging }
         ]">

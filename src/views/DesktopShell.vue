@@ -2,7 +2,6 @@
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import Terminal from "../components/Terminal.vue";
 import DesktopWallpaper from "../components/desktop/DesktopWallpaper.vue";
 import DesktopIcons from "../components/desktop/DesktopIcons.vue";
 import type { DesktopIconItem } from "../components/desktop/DesktopIcon.vue";
@@ -14,6 +13,7 @@ import FilesApp from "./apps/FilesApp.vue";
 import ActivityMonitor from "./apps/ActivityMonitor.vue";
 import TextEditorApp from "./apps/TextEditorApp.vue";
 import SettingsApp from "./apps/SettingsApp.vue";
+import TerminalApp from "./apps/TerminalApp.vue";
 
 type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser" | "editor";
 
@@ -150,7 +150,6 @@ function clearDesktopSelection() {
   desktopIconsRef.value?.clearSelection();
 }
 
-const connectionStatus = computed(() => (isConnected.value ? "已连接" : "未连接"));
 
 onMounted(async () => {
   unlistenProxyError = await listen<BrowserProxyError>("browser-proxy-error", (event) => {
@@ -177,22 +176,17 @@ onUnmounted(() => {
     </div>
     <!-- 壁纸背景 -->
     <DesktopWallpaper />
-    <!-- <div style="position: absolute; inset: 0; background: #333; z-index: 0;"></div> -->
 
     <!-- 桌面图标 -->
     <DesktopIcons ref="desktopIconsRef" :items="desktopItems" @open-app="openApp" />
 
     <!-- 窗口层 -->
-    <section class="window-layer">
-      <AppWindow v-for="app in openApps" :key="app" :app-id="app" :title="appTitles[app]" :active="focusedApp === app"
+    <AppWindow v-for="app in openApps" :key="app" :app-id="app" :title="appTitles[app]" :active="focusedApp === app"
         :offset="getWindowOffset(app)" :z-index="getWindowZIndex(app)"
-        :status-text="app === 'terminal' ? connectionStatus : undefined"
-        :status-online="app === 'terminal' ? isConnected : undefined" :custom-chrome="app === 'settings'"
+        :custom-chrome="app === 'settings'"
         @close="closeApp(app)" @focus="focusApp(app)" v-slot="windowProps">
         <!-- 终端应用 -->
-        <div v-if="app === 'terminal'" class="terminal-shell">
-          <Terminal :session-id="sessionId" />
-        </div>
+          <TerminalApp v-if="app === 'terminal'" :session-id="sessionId" />
 
         <!-- 文件管理器 -->
         <FilesApp v-else-if="app === 'files'" :session-id="sessionId" @open-file="openFileInEditor" />
@@ -212,8 +206,7 @@ onUnmounted(() => {
           <h2>正在准备</h2>
           <p>这个模块会作为系统级 App 扩展加入。</p>
         </div>
-      </AppWindow>
-    </section>
+    </AppWindow>
 
     <!-- Dock 栏 -->
     <DesktopDock :items="dockItems" :open-apps="openApps" @open-app="openApp" />
@@ -249,8 +242,4 @@ onUnmounted(() => {
   color: var(--foreground);
 }
 
-.terminal-shell {
-  height: 100%;
-  width: 100%;
-}
 </style>

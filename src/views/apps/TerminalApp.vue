@@ -1,3 +1,7 @@
+<!--
+  TerminalApp.vue - 终端应用组件
+  基于 xterm.js 的 SSH 终端，支持 WebGL 渲染
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
@@ -165,49 +169,35 @@ watch(
 </script>
 
 <template>
-  <div class="terminal-container">
-    <div ref="terminalRef" class="terminal"></div>
+  <div class="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e]">
+    <div ref="terminalRef" class="flex-1 w-full h-full"></div>
   </div>
 </template>
 
 <style scoped>
-.terminal-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background-color: #1e1e1e;
-  padding: 8px;
-}
-
-.terminal {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-}
+@reference "../../style.css";
 
 :deep(.xterm) {
-  height: 100%;
+  @apply h-full;
 }
 
 :deep(.xterm-viewport) {
-  background-color: #1e1e1e !important;
+  @apply !bg-[#1e1e1e];
 }
 
 :deep(.xterm-viewport::-webkit-scrollbar) {
-  width: 8px;
+  @apply w-2;
 }
 
 :deep(.xterm-viewport::-webkit-scrollbar-track) {
-  background: transparent;
+  @apply bg-transparent;
 }
 
 :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  @apply bg-white/15 rounded;
 }
 
 :deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
-  background-color: rgba(255, 255, 255, 0.25);
+  @apply bg-white/25;
 }
 </style>

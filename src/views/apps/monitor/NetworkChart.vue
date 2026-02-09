@@ -1,3 +1,7 @@
+<!--
+  NetworkChart.vue - 网络流量图表组件
+  使用 ECharts 展示网络上下行速率
+-->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
@@ -132,61 +136,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="network-chart">
-        <div class="chart-header">
-            <span class="chart-title">网络流量</span>
-            <div class="chart-stats">
-                <span class="stat stat--rx">↓ {{ currentRx }}</span>
-                <span class="stat stat--tx">↑ {{ currentTx }}</span>
+    <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
+        <div class="flex justify-between items-center mb-3">
+            <span class="text-sm font-medium text-foreground/80">网络流量</span>
+            <div class="flex gap-3">
+                <span class="text-xs font-medium text-blue-400">↓ {{ currentRx }}</span>
+                <span class="text-xs font-medium text-amber-400">↑ {{ currentTx }}</span>
             </div>
         </div>
-        <div ref="chartRef" class="chart-container"></div>
+        <div ref="chartRef" class="flex-1 min-h-[150px]"></div>
     </div>
 </template>
-
-<style scoped>
-.network-chart {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 16px;
-    padding: 16px;
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.chart-title {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
-}
-
-.chart-stats {
-    display: flex;
-    gap: 12px;
-}
-
-.stat {
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-.stat--rx {
-    color: #60a5fa;
-}
-
-.stat--tx {
-    color: #fbbf24;
-}
-
-.chart-container {
-    flex: 1;
-    min-height: 150px;
-}
-</style>

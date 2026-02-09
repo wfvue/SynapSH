@@ -1,3 +1,7 @@
+<!--
+  ProcessList.vue - 进程列表组件
+  展示系统进程列表，支持搜索、排序和操作
+-->
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
@@ -57,12 +61,12 @@ function formatBytes(kb: number): string {
 function getStatusClass(status: string): string {
     const firstChar = status.charAt(0);
     switch (firstChar) {
-        case 'R': return 'status-running';
-        case 'S': return 'status-sleeping';
-        case 'Z': return 'status-zombie';
-        case 'D': return 'status-disk';
-        case 'T': return 'status-stopped';
-        default: return 'status-default';
+        case 'R': return 'bg-emerald-500/15 text-emerald-400';
+        case 'S': return 'bg-sky-400/15 text-sky-400';
+        case 'Z': return 'bg-amber-500/15 text-amber-400';
+        case 'D': return 'bg-red-500/15 text-red-400';
+        case 'T': return 'bg-gray-400/15 text-gray-400';
+        default: return 'bg-white/10 text-foreground/60';
     }
 }
 
@@ -147,336 +151,64 @@ function handleRowClick(process: ProcessInfo) {
 </script>
 
 <template>
-    <div class="process-list">
-        <div class="list-toolbar">
-            <div class="search-box">
-                <span class="icon-[mdi--magnify] search-icon"></span>
-                <input v-model="searchQuery" type="text" placeholder="搜索进程 (名称/PID/用户/命令)..." class="search-input" />
+    <div class="h-full flex flex-col bg-card/50 rounded-2xl border border-border/50 overflow-hidden">
+        <div class="flex justify-between items-center px-4 py-3 border-b border-border/50">
+            <div class="relative flex items-center">
+                <span class="icon-[mdi--magnify] absolute left-2.5 text-muted-foreground text-base"></span>
+                <input v-model="searchQuery" type="text" placeholder="搜索进程 (名称/PID/用户/命令)..."
+                    class="w-[280px] py-1.5 pl-8 pr-2.5 bg-muted/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 transition-colors" />
             </div>
-            <div class="process-count">共 {{ filteredProcesses.length }} 个进程</div>
+            <div class="text-xs text-muted-foreground">共 {{ filteredProcesses.length }} 个进程</div>
         </div>
 
-        <div class="list-header">
-            <span 
-                v-for="col in columns" 
-                :key="col.key"
-                class="col" 
-                :class="{ sortable: col.sortable }"
+        <div class="flex gap-2 px-4 py-2.5 bg-muted/30 text-[0.7rem] text-muted-foreground uppercase tracking-wider border-b border-border/30">
+            <span v-for="col in columns" :key="col.key" class="shrink-0 cursor-pointer select-none hover:text-foreground/80 transition-colors"
+                :class="col.sortable ? 'hover:text-foreground' : ''"
                 :style="{ width: col.width, flex: col.width.includes('fr') ? col.width : 'none' }"
-                @click="col.sortable && toggleSort(col.key as keyof ProcessInfo)"
-            >
+                @click="col.sortable && toggleSort(col.key as keyof ProcessInfo)">
                 {{ col.label }} {{ col.sortable ? getSortIcon(col.key as keyof ProcessInfo) : '' }}
             </span>
-            <span class="col col-action"></span>
+            <span class="col-action"></span>
         </div>
 
-        <div class="list-body">
-            <div 
-                v-for="proc in filteredProcesses" 
-                :key="proc.pid" 
-                class="list-row"
-                @click="handleRowClick(proc)"
-            >
-                <span class="col col-pid">{{ proc.pid }}</span>
-                <span class="col col-name" :title="proc.command">
-                    <span class="process-icon">{{ proc.name.charAt(0).toUpperCase() }}</span>
+        <div class="flex-1 overflow-auto">
+            <div v-for="proc in filteredProcesses" :key="proc.pid"
+                class="flex gap-2 px-4 py-2.5 text-sm text-foreground/80 border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer items-center"
+                @click="handleRowClick(proc)">
+                <span class="text-muted-foreground font-mono text-xs w-[80px] shrink-0">{{ proc.pid }}</span>
+                <span class="flex items-center gap-2 font-medium flex-[2] min-w-0 truncate" :title="proc.command">
+                    <span
+                        class="w-[22px] h-[22px] bg-gradient-to-br from-sky-400/30 to-sky-400/10 rounded-md flex items-center justify-center text-xs font-semibold text-sky-400 shrink-0">{{ proc.name.charAt(0).toUpperCase() }}</span>
                     {{ proc.name }}
                 </span>
-                <span class="col col-user">{{ proc.user }}</span>
-                <span class="col col-status">
-                    <span class="status-badge" :class="getStatusClass(proc.status)">
+                <span class="w-[90px] shrink-0 text-muted-foreground truncate">{{ proc.user }}</span>
+                <span class="w-[80px] shrink-0">
+                    <span class="inline-block px-1.5 py-0.5 rounded text-[0.65rem] font-medium"
+                        :class="getStatusClass(proc.status)">
                         {{ proc.statusDesc }}
                     </span>
                 </span>
-                <span class="col col-cpu" :class="{ high: proc.cpu > 50 }">{{ proc.cpu.toFixed(1) }}%</span>
-                <span class="col col-mem" :class="{ high: proc.memory > 50 }">{{ proc.memory.toFixed(1) }}%</span>
-                <span class="col col-rss">{{ formatBytes(proc.rss) }}</span>
-                <span class="col col-elapsed">{{ proc.elapsedTime }}</span>
-                <span class="col col-action">
-                    <button 
-                        class="kill-btn" 
-                        title="终止进程" 
-                        :disabled="killingPid === proc.pid"
-                        @click="handleKillProcess(proc.pid, $event)"
-                    >
-                        <span class="icon-[mdi--close]"></span>
+                <span class="w-[70px] shrink-0 font-mono text-right"
+                    :class="proc.cpu > 50 ? 'text-amber-500 font-medium' : ''">{{ proc.cpu.toFixed(1) }}%</span>
+                <span class="w-[70px] shrink-0 font-mono text-right"
+                    :class="proc.memory > 50 ? 'text-amber-500 font-medium' : ''">{{ proc.memory.toFixed(1) }}%</span>
+                <span class="w-[100px] shrink-0 font-mono text-right">{{ formatBytes(proc.rss) }}</span>
+                <span class="w-[90px] shrink-0 font-mono text-right">{{ proc.elapsedTime }}</span>
+                <span class="flex gap-1 justify-end">
+                    <button class="flex items-center justify-center w-6 h-6 rounded-md bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 hover:bg-red-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="终止进程" :disabled="killingPid === proc.pid" @click="handleKillProcess(proc.pid, $event)">
+                        <span class="icon-[mdi--close] text-sm"></span>
                     </button>
-                    <button 
-                        class="force-kill-btn" 
-                        title="强制终止" 
-                        :disabled="killingPid === proc.pid"
-                        @click="handleForceKill(proc.pid, $event)"
-                    >
-                        <span class="icon-[mdi--lightning-bolt]"></span>
+                    <button class="flex items-center justify-center w-6 h-6 rounded-md bg-amber-500/10 text-amber-500 opacity-0 group-hover:opacity-100 hover:bg-amber-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="强制终止" :disabled="killingPid === proc.pid" @click="handleForceKill(proc.pid, $event)">
+                        <span class="icon-[mdi--lightning-bolt] text-sm"></span>
                     </button>
                 </span>
             </div>
-            <div v-if="filteredProcesses.length === 0" class="empty-state">
-                <span class="icon-[mdi--magnify]"></span>
-                <p>未找到匹配的进程</p>
+            <div v-if="filteredProcesses.length === 0" class="flex flex-col items-center justify-center py-10 text-muted-foreground/50 gap-3">
+                <span class="icon-[mdi--magnify] text-3xl"></span>
+                <p class="text-sm">未找到匹配的进程</p>
             </div>
         </div>
     </div>
 </template>
-
-<style scoped>
-.process-list {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 16px;
-    overflow: hidden;
-}
-
-.list-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.search-box {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.search-icon {
-    position: absolute;
-    left: 10px;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 16px;
-}
-
-.search-input {
-    width: 280px;
-    padding: 8px 10px 8px 32px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    color: #fff;
-    font-size: 0.8rem;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.search-input::placeholder {
-    color: rgba(255, 255, 255, 0.3);
-}
-
-.search-input:focus {
-    border-color: rgba(125, 211, 252, 0.5);
-}
-
-.process-count {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.list-header {
-    display: flex;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.03);
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.list-header .col {
-    flex-shrink: 0;
-}
-
-.sortable {
-    cursor: pointer;
-    user-select: none;
-    transition: color 0.2s;
-}
-
-.sortable:hover {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.list-body {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: auto;
-}
-
-.list-row {
-    display: flex;
-    gap: 8px;
-    padding: 10px 16px;
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.8);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    transition: background 0.2s;
-    cursor: pointer;
-    align-items: center;
-}
-
-.list-row:hover {
-    background: rgba(255, 255, 255, 0.04);
-}
-
-.col {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.col-pid {
-    color: rgba(255, 255, 255, 0.5);
-    font-family: monospace;
-    font-size: 0.75rem;
-}
-
-.col-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
-}
-
-.process-icon {
-    width: 22px;
-    height: 22px;
-    background: linear-gradient(135deg, rgba(125, 211, 252, 0.3), rgba(125, 211, 252, 0.1));
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #7dd3fc;
-}
-
-.col-user {
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.status-badge {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 0.65rem;
-    font-weight: 500;
-}
-
-.status-running {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-}
-
-.status-sleeping {
-    background: rgba(125, 211, 252, 0.15);
-    color: #7dd3fc;
-}
-
-.status-zombie {
-    background: rgba(245, 158, 11, 0.15);
-    color: #fbbf24;
-}
-
-.status-disk {
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-}
-
-.status-stopped {
-    background: rgba(156, 163, 175, 0.15);
-    color: #9ca3af;
-}
-
-.status-default {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.col-cpu,
-.col-mem,
-.col-rss,
-.col-threads,
-.col-nice,
-.col-elapsed {
-    font-family: monospace;
-    text-align: right;
-}
-
-.col-cpu.high,
-.col-mem.high {
-    color: #f59e0b;
-    font-weight: 500;
-}
-
-.col-action {
-    display: flex;
-    gap: 4px;
-    justify-content: flex-end;
-}
-
-.kill-btn,
-.force-kill-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.2s, background 0.2s;
-}
-
-.kill-btn {
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-}
-
-.force-kill-btn {
-    background: rgba(245, 158, 11, 0.1);
-    color: #fbbf24;
-}
-
-.list-row:hover .kill-btn,
-.list-row:hover .force-kill-btn {
-    opacity: 1;
-}
-
-.kill-btn:hover:not(:disabled) {
-    background: rgba(255, 107, 107, 0.25);
-}
-
-.force-kill-btn:hover:not(:disabled) {
-    background: rgba(245, 158, 11, 0.25);
-}
-
-.kill-btn:disabled,
-.force-kill-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-    color: rgba(255, 255, 255, 0.3);
-    gap: 12px;
-}
-
-.empty-state span {
-    font-size: 32px;
-}
-
-.empty-state p {
-    font-size: 0.85rem;
-}
-</style>
