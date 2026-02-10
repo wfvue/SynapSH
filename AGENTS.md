@@ -17,8 +17,8 @@ trigger: always_on
 | 可视化 | ECharts |
 | 状态管理 | VueUse (主题/持久化) |
 | 后端 | Tauri v2 + tokio |
-| SSH | russh + russh-keys |
-| 文件传输 | russh-sftp |
+| SSH | russh + russh-keys (SOCKS5 Zero-Copy) |
+| 文件传输 | russh-sftp (并发流) |
 | 本地数据库 | sqlx (SQLite) |
 
 ## 代码规范
@@ -46,6 +46,8 @@ trigger: always_on
 - Tauri commands 使用 `#[tauri::command]` 宏
 - 异步操作使用 `async/await`
 - 错误处理：返回 `Result<T, String>` 给前端
+- **并发控制**：避免全局锁，使用 Cloneable Handle + Channel
+- **网络 IO**：使用 `tokio::io::copy_bidirectional` 实现零拷贝转发
 
 ## 美学 UI 规范
 
@@ -199,6 +201,7 @@ src/
 src-tauri/src/
 ├── lib.rs              # Tauri commands
 ├── db.rs               # SQLite 数据库操作
+├── ssh.rs              # SSH 会话/SOCKS5 代理/SFTP
 └── main.rs             # 入口
 ```
 

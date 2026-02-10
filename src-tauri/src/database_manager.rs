@@ -1,6 +1,7 @@
 //! 远程服务器数据库管理模块
 //! 提供数据库检测、安装、配置、备份等功能
 
+#![allow(dead_code)]
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,8 @@ pub enum DatabaseType {
     Redis,
     MongoDB,
     MariaDB,
+    SqlServer,
+    Sqlite,
     Elasticsearch,
     ClickHouse,
 }
@@ -27,6 +30,8 @@ impl DatabaseType {
             DatabaseType::Redis => "redis",
             DatabaseType::MongoDB => "mongodb",
             DatabaseType::MariaDB => "mariadb",
+            DatabaseType::SqlServer => "sqlserver",
+            DatabaseType::Sqlite => "sqlite",
             DatabaseType::Elasticsearch => "elasticsearch",
             DatabaseType::ClickHouse => "clickhouse",
         }
@@ -39,6 +44,8 @@ impl DatabaseType {
             DatabaseType::Redis => "Redis",
             DatabaseType::MongoDB => "MongoDB",
             DatabaseType::MariaDB => "MariaDB",
+            DatabaseType::SqlServer => "SQL Server",
+            DatabaseType::Sqlite => "SQLite",
             DatabaseType::Elasticsearch => "Elasticsearch",
             DatabaseType::ClickHouse => "ClickHouse",
         }
@@ -51,6 +58,8 @@ impl DatabaseType {
             DatabaseType::Redis => 6379,
             DatabaseType::MongoDB => 27017,
             DatabaseType::MariaDB => 3306,
+            DatabaseType::SqlServer => 1433,
+            DatabaseType::Sqlite => 0,
             DatabaseType::Elasticsearch => 9200,
             DatabaseType::ClickHouse => 8123,
         }
@@ -63,6 +72,8 @@ impl DatabaseType {
             DatabaseType::Redis => "redis-server",
             DatabaseType::MongoDB => "mongod",
             DatabaseType::MariaDB => "mariadb",
+            DatabaseType::SqlServer => "mssql-server",
+            DatabaseType::Sqlite => "",
             DatabaseType::Elasticsearch => "elasticsearch",
             DatabaseType::ClickHouse => "clickhouse-server",
         }
@@ -122,22 +133,162 @@ pub struct DatabaseDetectionResult {
 pub struct DatabaseManager;
 
 impl DatabaseManager {
-    /// 检测所有支持的数据库
-    pub async fn detect_all_databases(exec: &impl CommandExecutor) -> Result<Vec<DatabaseDetectionResult>> {
-        let db_types = vec![
-            DatabaseType::MySQL,
-            DatabaseType::PostgreSQL,
-            DatabaseType::Redis,
-            DatabaseType::MongoDB,
-            DatabaseType::MariaDB,
-        ];
+    /// 检测所有支持的数据库 (并行优化版)
+    pub async fn detect_all_databases(
+        exec: &impl CommandExecutor,
+    ) -> Result<Vec<DatabaseDetectionResult>> {
+        // 构造并行检测脚本
+        let script = r#"
+        check_service() {
+            if command -v systemctl >/dev/null 2>&1; then
+                systemctl is-active $1 2>/dev/null
+            else
+                service $1 status 2>/dev/null | grep -q running && echo "active" || echo "inactive"
+            fi
+        }
 
+        # MySQL
+        (
+            if command -v mysql >/dev/null 2>&1; then 
+                ver=$(mysql --version 2>/dev/null | head -n 1 | tr -d '\n')
+                stat=$(check_service mysql)
+                path=$(which mysql | tr -d '\n')
+                echo "mysql|true|$ver|$stat|$path"
+            else 
+                echo "mysql|false|||"
+            fi
+        ) &
+
+        # PostgreSQL
+        (
+            if command -v psql >/dev/null 2>&1; then 
+                ver=$(psql --version 2>/dev/null | head -n 1 | tr -d '\n')
+                stat=$(check_service postgresql)
+                path=$(which psql | tr -d '\n')
+                echo "postgresql|true|$ver|$stat|$path"
+            else 
+                echo "postgresql|false|||"
+            fi
+        ) &
+
+        # Redis
+        (
+            if command -v redis-server >/dev/null 2>&1; then 
+                ver=$(redis-server --version 2>/dev/null | head -n 1 | tr -d '\n')
+                stat=$(check_service redis-server)
+                path=$(which redis-server | tr -d '\n')
+                echo "redis|true|$ver|$stat|$path"
+            else 
+                echo "redis|false|||"
+            fi
+        ) &
+
+        # MongoDB
+        (
+            if command -v mongod >/dev/null 2>&1; then 
+                ver=$(mongod --version 2>/dev/null | head -n 1 | tr -d '\n')
+                stat=$(check_service mongod)
+                path=$(which mongod | tr -d '\n')
+                echo "mongodb|true|$ver|$stat|$path"
+            else 
+                echo "mongodb|false|||"
+            fi
+        ) &
+
+        # MariaDB
+        (
+            if command -v mariadb >/dev/null 2>&1; then 
+                ver=$(mariadb --version 2>/dev/null | head -n 1 | tr -d '\n')
+                stat=$(check_service mariadb)
+                path=$(which mariadb | tr -d '\n')
+                echo "mariadb|true|$ver|$stat|$path"
+            elif command -v mysql >/dev/null 2>&1 && mysql --version 2>/dev/null | grep -qi "mariadb"; then 
+                ver=$(mysql --version 2>/dev/null | head -n 1 | tr -d '\n')
+                stat=$(check_service mysql)
+                path=$(which mysql | tr -d '\n')
+                echo "mariadb|true|$ver|$stat|$path"
+            else 
+                echo "mariadb|false|||"
+            fi
+        ) &
+
+        base_wait() {
+            wait
+        }
+        
+        base_wait
+        "#;
+
+        let output = exec.execute(script).await?;
         let mut results = Vec::new();
-        for db_type in db_types {
-            match Self::detect_database(exec, &db_type).await {
-                Ok(result) => results.push(result),
-                Err(e) => log::warn!("检测 {:?} 失败: {}", db_type, e),
+
+        for line in output.lines() {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() < 5 {
+                continue;
             }
+
+            let db_type_str = parts[0];
+            let installed = parts[1] == "true";
+            let version_raw = parts[2];
+            let status_str = parts[3];
+            let path_str = parts[4];
+
+            let db_type = match db_type_str {
+                "mysql" => DatabaseType::MySQL,
+                "postgresql" => DatabaseType::PostgreSQL,
+                "redis" => DatabaseType::Redis,
+                "mongodb" => DatabaseType::MongoDB,
+                "mariadb" => DatabaseType::MariaDB,
+                _ => continue,
+            };
+
+            if !installed {
+                results.push(DatabaseDetectionResult {
+                    db_type,
+                    installed: false,
+                    version: None,
+                    status: DatabaseStatus::NotInstalled,
+                    port: None,
+                    install_path: None,
+                });
+                continue;
+            }
+
+            // 解析版本
+            let version = match db_type {
+                DatabaseType::MySQL => Self::extract_version(version_raw, &["Ver", "version"]),
+                DatabaseType::PostgreSQL => {
+                    Self::extract_version(version_raw, &["psql", "PostgreSQL"])
+                }
+                DatabaseType::Redis => Self::extract_version(version_raw, &["v=", "Redis server"]),
+                DatabaseType::MongoDB => Self::extract_version(version_raw, &["db version", "v"]),
+                DatabaseType::MariaDB => Self::extract_version(version_raw, &["Ver", "version"]),
+                _ => None,
+            };
+
+            // 解析状态
+            let status = if status_str.contains("active") {
+                DatabaseStatus::Running
+            } else {
+                DatabaseStatus::Stopped
+            };
+
+            // 默认端口
+            let port = Some(db_type.default_port());
+
+            results.push(DatabaseDetectionResult {
+                db_type,
+                installed: true,
+                version,
+                status,
+                port,
+                install_path: if path_str.is_empty() {
+                    None
+                } else {
+                    Some(path_str.to_string())
+                },
+            });
         }
 
         Ok(results)
@@ -154,6 +305,14 @@ impl DatabaseManager {
             DatabaseType::Redis => Self::detect_redis(exec).await?,
             DatabaseType::MongoDB => Self::detect_mongodb(exec).await?,
             DatabaseType::MariaDB => Self::detect_mariadb(exec).await?,
+            DatabaseType::SqlServer => (false, None, DatabaseStatus::NotInstalled, None, None),
+            DatabaseType::Sqlite => (
+                true,
+                Some("3.x".to_string()),
+                DatabaseStatus::Running,
+                Some(0),
+                None,
+            ),
             _ => (false, None, DatabaseStatus::NotInstalled, None, None),
         };
 
@@ -169,10 +328,20 @@ impl DatabaseManager {
 
     // ==================== 各数据库检测逻辑 ====================
 
-    async fn detect_mysql(exec: &impl CommandExecutor) -> Result<(bool, Option<String>, DatabaseStatus, Option<u16>, Option<String>)> {
+    async fn detect_mysql(
+        exec: &impl CommandExecutor,
+    ) -> Result<(
+        bool,
+        Option<String>,
+        DatabaseStatus,
+        Option<u16>,
+        Option<String>,
+    )> {
         // 检查是否安装
-        let version_output = exec.execute("mysql --version 2>/dev/null || echo 'NOT_FOUND'").await?;
-        
+        let version_output = exec
+            .execute("mysql --version 2>/dev/null || echo 'NOT_FOUND'")
+            .await?;
+
         if version_output.contains("NOT_FOUND") {
             return Ok((false, None, DatabaseStatus::NotInstalled, None, None));
         }
@@ -187,16 +356,29 @@ impl DatabaseManager {
         let port = Self::get_mysql_port(exec).await.ok();
 
         // 获取安装路径
-        let install_path = exec.execute("which mysql 2>/dev/null || echo ''").await.ok()
+        let install_path = exec
+            .execute("which mysql 2>/dev/null || echo ''")
+            .await
+            .ok()
             .filter(|s| !s.is_empty())
             .map(|s| s.trim().to_string());
 
         Ok((true, version, status, port, install_path))
     }
 
-    async fn detect_postgresql(exec: &impl CommandExecutor) -> Result<(bool, Option<String>, DatabaseStatus, Option<u16>, Option<String>)> {
-        let version_output = exec.execute("psql --version 2>/dev/null || echo 'NOT_FOUND'").await?;
-        
+    async fn detect_postgresql(
+        exec: &impl CommandExecutor,
+    ) -> Result<(
+        bool,
+        Option<String>,
+        DatabaseStatus,
+        Option<u16>,
+        Option<String>,
+    )> {
+        let version_output = exec
+            .execute("psql --version 2>/dev/null || echo 'NOT_FOUND'")
+            .await?;
+
         if version_output.contains("NOT_FOUND") {
             return Ok((false, None, DatabaseStatus::NotInstalled, None, None));
         }
@@ -204,16 +386,29 @@ impl DatabaseManager {
         let version = Self::extract_version(&version_output, &["psql", "PostgreSQL"]);
         let status = Self::check_service_status(exec, "postgresql").await?;
         let port = Self::get_postgresql_port(exec).await.ok();
-        let install_path = exec.execute("which psql 2>/dev/null || echo ''").await.ok()
+        let install_path = exec
+            .execute("which psql 2>/dev/null || echo ''")
+            .await
+            .ok()
             .filter(|s| !s.is_empty())
             .map(|s| s.trim().to_string());
 
         Ok((true, version, status, port, install_path))
     }
 
-    async fn detect_redis(exec: &impl CommandExecutor) -> Result<(bool, Option<String>, DatabaseStatus, Option<u16>, Option<String>)> {
-        let version_output = exec.execute("redis-server --version 2>/dev/null || echo 'NOT_FOUND'").await?;
-        
+    async fn detect_redis(
+        exec: &impl CommandExecutor,
+    ) -> Result<(
+        bool,
+        Option<String>,
+        DatabaseStatus,
+        Option<u16>,
+        Option<String>,
+    )> {
+        let version_output = exec
+            .execute("redis-server --version 2>/dev/null || echo 'NOT_FOUND'")
+            .await?;
+
         if version_output.contains("NOT_FOUND") {
             return Ok((false, None, DatabaseStatus::NotInstalled, None, None));
         }
@@ -221,16 +416,29 @@ impl DatabaseManager {
         let version = Self::extract_version(&version_output, &["v=", "Redis server"]);
         let status = Self::check_service_status(exec, "redis-server").await?;
         let port = Self::get_redis_port(exec).await.ok();
-        let install_path = exec.execute("which redis-server 2>/dev/null || echo ''").await.ok()
+        let install_path = exec
+            .execute("which redis-server 2>/dev/null || echo ''")
+            .await
+            .ok()
             .filter(|s| !s.is_empty())
             .map(|s| s.trim().to_string());
 
         Ok((true, version, status, port, install_path))
     }
 
-    async fn detect_mongodb(exec: &impl CommandExecutor) -> Result<(bool, Option<String>, DatabaseStatus, Option<u16>, Option<String>)> {
-        let version_output = exec.execute("mongod --version 2>/dev/null || echo 'NOT_FOUND'").await?;
-        
+    async fn detect_mongodb(
+        exec: &impl CommandExecutor,
+    ) -> Result<(
+        bool,
+        Option<String>,
+        DatabaseStatus,
+        Option<u16>,
+        Option<String>,
+    )> {
+        let version_output = exec
+            .execute("mongod --version 2>/dev/null || echo 'NOT_FOUND'")
+            .await?;
+
         if version_output.contains("NOT_FOUND") {
             return Ok((false, None, DatabaseStatus::NotInstalled, None, None));
         }
@@ -238,24 +446,44 @@ impl DatabaseManager {
         let version = Self::extract_version(&version_output, &["db version", "v"]);
         let status = Self::check_service_status(exec, "mongod").await?;
         let port = Some(27017); // MongoDB 默认端口
-        let install_path = exec.execute("which mongod 2>/dev/null || echo ''").await.ok()
+        let install_path = exec
+            .execute("which mongod 2>/dev/null || echo ''")
+            .await
+            .ok()
             .filter(|s| !s.is_empty())
             .map(|s| s.trim().to_string());
 
         Ok((true, version, status, port, install_path))
     }
 
-    async fn detect_mariadb(exec: &impl CommandExecutor) -> Result<(bool, Option<String>, DatabaseStatus, Option<u16>, Option<String>)> {
-        let version_output = exec.execute("mariadb --version 2>/dev/null || mysql --version 2>/dev/null || echo 'NOT_FOUND'").await?;
-        
-        if version_output.contains("NOT_FOUND") || !version_output.to_lowercase().contains("mariadb") {
+    async fn detect_mariadb(
+        exec: &impl CommandExecutor,
+    ) -> Result<(
+        bool,
+        Option<String>,
+        DatabaseStatus,
+        Option<u16>,
+        Option<String>,
+    )> {
+        let version_output = exec
+            .execute(
+                "mariadb --version 2>/dev/null || mysql --version 2>/dev/null || echo 'NOT_FOUND'",
+            )
+            .await?;
+
+        if version_output.contains("NOT_FOUND")
+            || !version_output.to_lowercase().contains("mariadb")
+        {
             return Ok((false, None, DatabaseStatus::NotInstalled, None, None));
         }
 
         let version = Self::extract_version(&version_output, &["Ver", "version"]);
         let status = Self::check_service_status(exec, "mariadb").await?;
         let port = Self::get_mysql_port(exec).await.ok();
-        let install_path = exec.execute("which mariadb 2>/dev/null || which mysql 2>/dev/null || echo ''").await.ok()
+        let install_path = exec
+            .execute("which mariadb 2>/dev/null || which mysql 2>/dev/null || echo ''")
+            .await
+            .ok()
             .filter(|s| !s.is_empty())
             .map(|s| s.trim().to_string());
 
@@ -271,7 +499,7 @@ impl DatabaseManager {
     ) -> Result<String> {
         // 检测操作系统类型
         let os_info = Self::detect_os(exec).await?;
-        
+
         let install_script = match db_type {
             DatabaseType::MySQL => Self::generate_mysql_install_script(&os_info, options),
             DatabaseType::PostgreSQL => Self::generate_postgresql_install_script(&os_info, options),
@@ -283,24 +511,36 @@ impl DatabaseManager {
 
         // 执行安装脚本
         let output = exec.execute(&install_script).await?;
-        
+
         Ok(output)
     }
 
     // ==================== 服务管理 ====================
 
     pub async fn start_service(exec: &impl CommandExecutor, service_name: &str) -> Result<String> {
-        let cmd = format!("sudo systemctl start {} 2>&1 || sudo service {} start 2>&1", service_name, service_name);
+        let cmd = format!(
+            "sudo systemctl start {} 2>&1 || sudo service {} start 2>&1",
+            service_name, service_name
+        );
         exec.execute(&cmd).await
     }
 
     pub async fn stop_service(exec: &impl CommandExecutor, service_name: &str) -> Result<String> {
-        let cmd = format!("sudo systemctl stop {} 2>&1 || sudo service {} stop 2>&1", service_name, service_name);
+        let cmd = format!(
+            "sudo systemctl stop {} 2>&1 || sudo service {} stop 2>&1",
+            service_name, service_name
+        );
         exec.execute(&cmd).await
     }
 
-    pub async fn restart_service(exec: &impl CommandExecutor, service_name: &str) -> Result<String> {
-        let cmd = format!("sudo systemctl restart {} 2>&1 || sudo service {} restart 2>&1", service_name, service_name);
+    pub async fn restart_service(
+        exec: &impl CommandExecutor,
+        service_name: &str,
+    ) -> Result<String> {
+        let cmd = format!(
+            "sudo systemctl restart {} 2>&1 || sudo service {} restart 2>&1",
+            service_name, service_name
+        );
         exec.execute(&cmd).await
     }
 
@@ -313,7 +553,9 @@ impl DatabaseManager {
 
     pub async fn get_config(exec: &impl CommandExecutor, db_type: &DatabaseType) -> Result<String> {
         let config_path = match db_type {
-            DatabaseType::MySQL | DatabaseType::MariaDB => "/etc/mysql/my.cnf /etc/my.cnf ~/.my.cnf",
+            DatabaseType::MySQL | DatabaseType::MariaDB => {
+                "/etc/mysql/my.cnf /etc/my.cnf ~/.my.cnf"
+            }
             DatabaseType::PostgreSQL => "/etc/postgresql/*/main/postgresql.conf",
             DatabaseType::Redis => "/etc/redis/redis.conf /etc/redis.conf",
             DatabaseType::MongoDB => "/etc/mongod.conf",
@@ -333,8 +575,13 @@ impl DatabaseManager {
             DatabaseType::MySQL | DatabaseType::MariaDB => "/etc/mysql/my.cnf".to_string(),
             DatabaseType::PostgreSQL => {
                 // 需要动态获取版本号
-                let version_dir = exec.execute("ls /etc/postgresql/ 2>/dev/null | head -1").await?;
-                format!("/etc/postgresql/{}/main/postgresql.conf", version_dir.trim())
+                let version_dir = exec
+                    .execute("ls /etc/postgresql/ 2>/dev/null | head -1")
+                    .await?;
+                format!(
+                    "/etc/postgresql/{}/main/postgresql.conf",
+                    version_dir.trim()
+                )
             }
             DatabaseType::Redis => "/etc/redis/redis.conf".to_string(),
             DatabaseType::MongoDB => "/etc/mongod.conf".to_string(),
@@ -342,12 +589,18 @@ impl DatabaseManager {
         };
 
         // 备份原配置
-        let backup_cmd = format!("sudo cp {} {}.backup.$(date +%Y%m%d_%H%M%S) 2>&1", config_path, config_path);
+        let backup_cmd = format!(
+            "sudo cp {} {}.backup.$(date +%Y%m%d_%H%M%S) 2>&1",
+            config_path, config_path
+        );
         let _ = exec.execute(&backup_cmd).await;
 
         // 写入新配置
         let escaped_content = config_content.replace("'", "'\"'\"'");
-        let cmd = format!("echo '{}' | sudo tee {} > /dev/null 2>&1", escaped_content, config_path);
+        let cmd = format!(
+            "echo '{}' | sudo tee {} > /dev/null 2>&1",
+            escaped_content, config_path
+        );
         exec.execute(&cmd).await
     }
 
@@ -364,13 +617,22 @@ impl DatabaseManager {
                 format!("mysqldump -u root {} > {} 2>&1", database_name, output_path)
             }
             DatabaseType::PostgreSQL => {
-                format!("pg_dump -U postgres {} > {} 2>&1", database_name, output_path)
+                format!(
+                    "pg_dump -U postgres {} > {} 2>&1",
+                    database_name, output_path
+                )
             }
             DatabaseType::MongoDB => {
-                format!("mongodump --db {} --out {} 2>&1", database_name, output_path)
+                format!(
+                    "mongodump --db {} --out {} 2>&1",
+                    database_name, output_path
+                )
             }
             DatabaseType::Redis => {
-                format!("redis-cli SAVE && cp /var/lib/redis/dump.rdb {} 2>&1", output_path)
+                format!(
+                    "redis-cli SAVE && cp /var/lib/redis/dump.rdb {} 2>&1",
+                    output_path
+                )
             }
             _ => return Err(anyhow!("暂不支持备份 {:?}", db_type)),
         };
@@ -402,12 +664,15 @@ impl DatabaseManager {
 
     // ==================== 辅助方法 ====================
 
-    async fn check_service_status(exec: &impl CommandExecutor, service_name: &str) -> Result<DatabaseStatus> {
+    async fn check_service_status(
+        exec: &impl CommandExecutor,
+        service_name: &str,
+    ) -> Result<DatabaseStatus> {
         let cmd = format!(
             "sudo systemctl is-active {} 2>/dev/null || sudo service {} status 2>&1 | grep -q running && echo 'active' || echo 'inactive'",
             service_name, service_name
         );
-        
+
         match exec.execute(&cmd).await {
             Ok(output) => {
                 if output.trim() == "active" {
@@ -431,17 +696,19 @@ impl DatabaseManager {
     }
 
     async fn get_redis_port(exec: &impl CommandExecutor) -> Result<u16> {
-        let output = exec.execute("redis-cli CONFIG GET port 2>/dev/null | tail -1").await?;
+        let output = exec
+            .execute("redis-cli CONFIG GET port 2>/dev/null | tail -1")
+            .await?;
         Ok(output.trim().parse().unwrap_or(6379))
     }
 
     fn extract_version(output: &str, keywords: &[&str]) -> Option<String> {
+        let version_regex = regex::Regex::new(r"(\d+\.\d+(?:\.\d+)?)").ok()?;
         for line in output.lines() {
             for keyword in keywords {
                 if let Some(pos) = line.find(keyword) {
                     let after = &line[pos + keyword.len()..];
                     // 提取版本号 (数字.数字.数字 格式)
-                    let version_regex = regex::Regex::new(r"(\d+\.\d+(?:\.\d+)?)").ok()?;
                     if let Some(cap) = version_regex.captures(after) {
                         return Some(cap.get(1)?.as_str().to_string());
                     }
@@ -452,8 +719,10 @@ impl DatabaseManager {
     }
 
     async fn detect_os(exec: &impl CommandExecutor) -> Result<OsInfo> {
-        let os_release = exec.execute("cat /etc/os-release 2>/dev/null || echo 'ID=unknown'").await?;
-        
+        let os_release = exec
+            .execute("cat /etc/os-release 2>/dev/null || echo 'ID=unknown'")
+            .await?;
+
         let mut id = "unknown".to_string();
         let mut version_id = None;
         let mut like = None;
@@ -462,15 +731,30 @@ impl DatabaseManager {
             if line.starts_with("ID=") {
                 id = line.trim_start_matches("ID=").trim_matches('"').to_string();
             } else if line.starts_with("VERSION_ID=") {
-                version_id = Some(line.trim_start_matches("VERSION_ID=").trim_matches('"').to_string());
+                version_id = Some(
+                    line.trim_start_matches("VERSION_ID=")
+                        .trim_matches('"')
+                        .to_string(),
+                );
             } else if line.starts_with("ID_LIKE=") {
-                like = Some(line.trim_start_matches("ID_LIKE=").trim_matches('"').to_string());
+                like = Some(
+                    line.trim_start_matches("ID_LIKE=")
+                        .trim_matches('"')
+                        .to_string(),
+                );
             }
         }
 
-        let package_manager = if id.contains("debian") || id.contains("ubuntu") || like.as_ref().map(|l| l.contains("debian")).unwrap_or(false) {
+        let package_manager = if id.contains("debian")
+            || id.contains("ubuntu")
+            || like.as_ref().map(|l| l.contains("debian")).unwrap_or(false)
+        {
             PackageManager::Apt
-        } else if id.contains("centos") || id.contains("rhel") || id.contains("fedora") || like.as_ref().map(|l| l.contains("rhel")).unwrap_or(false) {
+        } else if id.contains("centos")
+            || id.contains("rhel")
+            || id.contains("fedora")
+            || like.as_ref().map(|l| l.contains("rhel")).unwrap_or(false)
+        {
             PackageManager::Yum
         } else if id.contains("alpine") {
             PackageManager::Apk
@@ -490,7 +774,7 @@ impl DatabaseManager {
     fn generate_mysql_install_script(os: &OsInfo, options: &InstallOptions) -> String {
         let port = options.port.unwrap_or(3306);
         let password = options.root_password.as_deref().unwrap_or("");
-        
+
         match os.package_manager {
             PackageManager::Apt => format!(
                 r#"export DEBIAN_FRONTEND=noninteractive && \
@@ -515,7 +799,7 @@ echo "MySQL installed successfully on port {}""#,
 
     fn generate_postgresql_install_script(os: &OsInfo, options: &InstallOptions) -> String {
         let port = options.port.unwrap_or(5432);
-        
+
         match os.package_manager {
             PackageManager::Apt => format!(
                 r#"sudo apt-get update && \
@@ -540,7 +824,7 @@ echo "PostgreSQL installed successfully on port {}""#,
 
     fn generate_redis_install_script(os: &OsInfo, options: &InstallOptions) -> String {
         let port = options.port.unwrap_or(6379);
-        
+
         match os.package_manager {
             PackageManager::Apt => format!(
                 r#"sudo apt-get update && \
@@ -564,7 +848,7 @@ echo "Redis installed successfully on port {}""#,
 
     fn generate_mongodb_install_script(os: &OsInfo, options: &InstallOptions) -> String {
         let port = options.port.unwrap_or(27017);
-        
+
         match os.package_manager {
             PackageManager::Apt => format!(
                 r#"curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor && \
@@ -595,7 +879,7 @@ echo "MongoDB installed successfully on port {}""#,
 
     fn generate_mariadb_install_script(os: &OsInfo, options: &InstallOptions) -> String {
         let port = options.port.unwrap_or(3306);
-        
+
         match os.package_manager {
             PackageManager::Apt => format!(
                 r#"sudo apt-get update && \
@@ -629,9 +913,9 @@ struct OsInfo {
 
 #[derive(Debug, Clone)]
 enum PackageManager {
-    Apt,    // Debian/Ubuntu
-    Yum,    // CentOS/RHEL/Fedora
-    Apk,    // Alpine
+    Apt, // Debian/Ubuntu
+    Yum, // CentOS/RHEL/Fedora
+    Apk, // Alpine
     Unknown,
 }
 

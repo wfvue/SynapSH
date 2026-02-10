@@ -41,6 +41,11 @@ base64 = "0.22"
 time = "=0.3.36"
 base64ct = "=1.6.0"
 
+# 数据库
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+regex = "1"
+
 # Windows API - 仅 Windows 平台
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
@@ -52,8 +57,3 @@ windows = { version = "0.58", features = [
     "Win32_UI_Shell",
 ] }
 windows-version = "0.1"
-
-# 数据库
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
-uuid = { version = "1", features = ["v4", "serde"] }
-regex = "1"
