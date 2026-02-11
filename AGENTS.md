@@ -54,7 +54,6 @@ trigger: always_on
 ### 设计理念
 - **macOS 风格**：整体视觉风格模仿 macOS，营造高端、现代的桌面体验
 - **暗色主题优先**：深色背景 + 高对比度文字，减少视觉疲劳
-- **毛玻璃美学**：大量使用 `backdrop-blur` 实现半透明毛玻璃效果
 - **微动画**：所有交互都有细腻的过渡动画，提升用户体验
 
 ### 颜色系统
@@ -73,20 +72,6 @@ trigger: always_on
 | 警告 | `#f59e0b` / `amber-500` | 警告状态 |
 | 危险 | `#ef4444` / `red-500` | 错误/删除操作 |
 
-### 毛玻璃效果
-```css
-/* 轻度模糊 - 工具栏 */
-backdrop-blur-sm    /* blur(4px) */
-bg-neutral-800/60
-
-/* 中度模糊 - 弹窗、面板 */
-backdrop-blur-xl    /* blur(24px) */
-bg-neutral-800/80
-
-/* 重度模糊 - 右键菜单、悬浮框 */
-backdrop-blur-2xl   /* blur(40px) */
-bg-neutral-800/70
-```
 
 ### 圆角规范
 | 元素 | 圆角值 | TailwindCSS |
@@ -131,40 +116,6 @@ hover:scale-105      /* 悬停放大 */
 group-hover:scale-110 /* 组内图标放大 */
 animate-spin         /* 加载旋转 */
 ```
-
-### 组件样式规范
-
-#### 按钮
-```html
-<!-- 主要按钮 -->
-<button class="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors">
-
-<!-- 次要按钮 -->
-<button class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
-
-<!-- 图标按钮 -->
-<button class="p-2 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition">
-```
-
-#### 输入框
-```html
-<input class="bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm 
-  outline-none focus:border-blue-500 focus:bg-black/50 transition placeholder-neutral-600" />
-```
-
-#### 右键菜单
-- 背景：`bg-neutral-800/80 backdrop-blur-2xl`
-- 边框：`border border-white/15`
-- 圆角：`rounded-xl`
-- 阴影：`shadow-2xl`
-- 菜单项悬停：`hover:bg-blue-500` 渐变效果
-- 分隔线：`bg-white/10` 渐变淡出
-- 快捷键：右对齐，`text-neutral-500`
-
-#### 窗口标题栏
-- 红黄绿三色按钮（macOS 风格）
-- 拖拽区域：`-webkit-app-region: drag`
-- 按钮区：`-webkit-app-region: no-drag`
 
 ### 图标使用
 - 使用 Iconify 图标库

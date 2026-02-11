@@ -217,6 +217,12 @@ async function testAllConnections() {
 async function connectToMachine(machine: Machine) {
     isConnecting.value = machine.id;
     const sessionId = `session_${machine.id}_${Date.now()}`;
+    
+    // 根据认证类型选择正确的凭据，避免空字符串导致后端误判
+    const isKeyAuth = machine.auth_type === 'key';
+    const password = !isKeyAuth && machine.password ? machine.password : null;
+    const privateKey = isKeyAuth && machine.private_key_path ? machine.private_key_path : null;
+    
     try {
         await Promise.race([
             safeInvoke("connect_ssh", {
@@ -225,8 +231,8 @@ async function connectToMachine(machine: Machine) {
                     host: machine.host,
                     port: machine.port,
                     username: machine.username,
-                    password: machine.password || null,
-                    private_key: machine.private_key_path || null
+                    password: password,
+                    privateKey: privateKey  // 使用 camelCase，后端 serde 会自动转换
                 }
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error("连接超时 (15秒)")), 15000))

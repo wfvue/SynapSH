@@ -1,22 +1,24 @@
+//! SSH 会话、SOCKS5 代理与 SFTP 管理实现。
+
 use anyhow::{Context, Result};
 use log::info;
 use russh::client::Handle;
 use russh::keys::PublicKey;
 use russh::{ChannelId, Disconnect};
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, watch, Mutex};
+use tokio::sync::{mpsc, watch, Mutex, Semaphore};
+use tokio::time::{timeout, Duration, Instant};
 
 use crate::files::{FileEntry, FileEntryType, FileListResult};
 
 // SSH 会话管理
 pub struct SSHSession {
-    // 回退到 Arc<Mutex> 以解决 russh Handle 不支持 Clone 的问题
-    // 但我们会优化锁的粒度，确保 IO 并发
-    pub handle: Arc<Mutex<Handle<SSHClient>>>,
+    pub handle: Arc<Handle<SSHClient>>,
     pub channel: russh::Channel<russh::client::Msg>,
     #[allow(dead_code)]
     pub shell_channel_id: Arc<Mutex<Option<ChannelId>>>,
@@ -30,14 +32,12 @@ pub struct Socks5Proxy {
 }
 
 impl Socks5Proxy {
-    async fn start(
-        handle: Arc<Mutex<Handle<SSHClient>>>,
-        _app: tauri::AppHandle,
-        _session_id: String,
-    ) -> Result<Self> {
+    async fn start(handle: Arc<Handle<SSHClient>>) -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
         let port = listener.local_addr()?.port();
         let (shutdown, mut shutdown_rx) = watch::channel(false);
+        let connection_limiter = Arc::new(Semaphore::new(128));
+        let failed_target_cache = Arc::new(Mutex::new(HashMap::<String, Instant>::new()));
 
         log::info!("SOCKS5 Proxy started on port {}", port);
 
@@ -51,15 +51,31 @@ impl Socks5Proxy {
                         match accept {
                             Ok((stream, _addr)) => {
                                 let handle = handle.clone();
+                                let limiter = connection_limiter.clone();
+                                let failed_target_cache = failed_target_cache.clone();
                                 tokio::spawn(async move {
-                                    if let Err(err) = handle_socks5_client(stream, handle).await {
+                                    let _permit = match limiter.acquire_owned().await {
+                                        Ok(permit) => permit,
+                                        Err(err) => {
+                                            log::warn!("SOCKS5 limiter acquire failed: {err}");
+                                            return;
+                                        }
+                                    };
+                                    if let Err(err) = handle_socks5_client(
+                                        stream,
+                                        handle,
+                                        failed_target_cache,
+                                    )
+                                    .await
+                                    {
                                         log::debug!("SOCKS5 client error: {err}");
                                     }
                                 });
                             }
                             Err(err) => {
                                 log::warn!("SOCKS5 accept error: {err}");
-                                break;
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                                continue;
                             }
                         }
                     }
@@ -68,6 +84,17 @@ impl Socks5Proxy {
         });
 
         Ok(Self { port, shutdown })
+    }
+
+    async fn is_alive(&self) -> bool {
+        matches!(
+            timeout(
+                Duration::from_millis(300),
+                TcpStream::connect(("127.0.0.1", self.port)),
+            )
+            .await,
+            Ok(Ok(_))
+        )
     }
 }
 
@@ -90,7 +117,13 @@ impl SSHSession {
         info!("开始连接 SSH: {}:{} 用户: {}", host, port, username);
 
         let config = russh::client::Config {
+            window_size: 8 * 1024 * 1024,
+            maximum_packet_size: 128 * 1024,
+            channel_buffer_size: 1024,
             inactivity_timeout: Some(std::time::Duration::from_secs(300)),
+            keepalive_interval: Some(std::time::Duration::from_secs(20)),
+            keepalive_max: 6,
+            nodelay: true,
             ..Default::default()
         };
         let config = Arc::new(config);
@@ -128,11 +161,23 @@ impl SSHSession {
 
         // 打开交互式 Shell 通道
         info!("打开 SSH Shell 通道...");
-        let channel = handle.channel_open_session().await?;
-        channel
-            .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
-            .await?;
-        channel.request_shell(false).await?;
+        let channel = match handle.channel_open_session().await {
+            Ok(ch) => ch,
+            Err(e) => {
+                log::error!("打开会话通道失败: {:?}", e);
+                return Err(anyhow::anyhow!("Failed to open session channel: {:?}", e));
+            }
+        };
+        log::info!("会话通道已打开");
+
+        log::info!("跳过 PTY 请求，直接请求 Shell...");
+        match channel.request_shell(false).await {
+            Ok(_) => log::info!("Shell 请求成功"),
+            Err(e) => {
+                log::error!("Shell 请求失败: {:?}", e);
+                return Err(anyhow::anyhow!("Failed to request shell: {:?}", e));
+            }
+        }
 
         let channel_id = channel.id();
         *shell_channel_id.lock().await = Some(channel_id);
@@ -153,7 +198,7 @@ impl SSHSession {
         });
 
         Ok(SSHSession {
-            handle: Arc::new(Mutex::new(handle)),
+            handle: Arc::new(handle),
             channel,
             shell_channel_id,
             socks5_proxy: None,
@@ -177,18 +222,17 @@ impl SSHSession {
 
     #[allow(dead_code)]
     pub async fn disconnect(self) -> Result<()> {
-        let handle = self.handle.lock().await;
-        let result = handle.disconnect(Disconnect::ByApplication, "", "").await;
+        let result = self
+            .handle
+            .disconnect(Disconnect::ByApplication, "", "")
+            .await;
         Ok(result?)
     }
 
     /// 执行一次性命令并返回输出
     pub async fn exec_command(&self, command: &str) -> Result<String> {
-        let mut channel = {
-            let handle = self.handle.lock().await;
-            let channel: russh::Channel<russh::client::Msg> = handle.channel_open_session().await?;
-            channel
-        }; // Lock released here!
+        let mut channel: russh::Channel<russh::client::Msg> =
+            self.handle.channel_open_session().await?;
 
         channel.exec(true, command).await?;
 
@@ -211,27 +255,41 @@ impl SSHSession {
     }
 
     pub async fn check_direct_tcpip(&self, host: &str, port: u16) -> Result<()> {
-        let handle = self.handle.lock().await;
-        let channel = handle
+        let channel = self
+            .handle
             .channel_open_direct_tcpip(host.to_string(), port.into(), "127.0.0.1".to_string(), 0u32)
             .await?;
         let _ = channel.close().await;
         Ok(())
     }
 
-    pub async fn ensure_socks5_proxy(
-        &mut self,
-        app: tauri::AppHandle,
-        session_id: String,
-    ) -> Result<u16> {
-        if let Some(proxy) = &self.socks5_proxy {
-            return Ok(proxy.port);
+    pub async fn proxy_port_if_alive(&self) -> Option<u16> {
+        let proxy = self.socks5_proxy.as_ref()?;
+        if proxy.is_alive().await {
+            Some(proxy.port)
+        } else {
+            None
+        }
+    }
+
+    pub async fn ensure_socks5_proxy(&mut self) -> Result<u16> {
+        if let Some(port) = self.proxy_port_if_alive().await {
+            return Ok(port);
         }
 
-        let proxy = Socks5Proxy::start(self.handle.clone(), app, session_id).await?;
+        if let Some(stale_port) = self.socks5_proxy.as_ref().map(|proxy| proxy.port) {
+            log::warn!("检测到失效 SOCKS5 代理端口 {}，准备重建", stale_port);
+            self.socks5_proxy = None;
+        }
+
+        let proxy = Socks5Proxy::start(self.handle.clone()).await?;
         let port = proxy.port;
         self.socks5_proxy = Some(proxy);
         Ok(port)
+    }
+
+    pub fn invalidate_socks5_proxy(&mut self) {
+        self.socks5_proxy = None;
     }
 
     /// 获取或创建 SFTP 会话
@@ -243,11 +301,7 @@ impl SSHSession {
 
         if guard.is_none() {
             log::info!("[SFTP] Initializing new SFTP session...");
-            // Lock scope optimization
-            let channel = {
-                let handle = self.handle.lock().await;
-                handle.channel_open_session().await?
-            };
+            let channel = self.handle.channel_open_session().await?;
 
             channel.request_subsystem(false, "sftp").await?;
             let sftp = russh_sftp::client::SftpSession::new(channel.into_stream()).await?;
@@ -515,11 +569,74 @@ const SOCKS5_CMD_CONNECT: u8 = 0x01;
 const SOCKS5_ADDR_TYPE_IPV4: u8 = 0x01;
 const SOCKS5_ADDR_TYPE_DOMAIN: u8 = 0x03;
 const SOCKS5_ADDR_TYPE_IPV6: u8 = 0x04;
+const SOCKS5_REPLY_SUCCEEDED: u8 = 0x00;
+const SOCKS5_REPLY_HOST_UNREACHABLE: u8 = 0x04;
+const MAX_PROXY_CONNECTIONS: usize = 64;
+const DIRECT_TCPIP_OPEN_TIMEOUT: Duration = Duration::from_secs(8);
+const FAILED_TARGET_TTL: Duration = Duration::from_secs(20);
+
+fn target_key(host: &str, port: u16) -> String {
+    format!("{host}:{port}")
+}
+
+async fn is_target_temporarily_blocked(
+    failed_target_cache: &Arc<Mutex<HashMap<String, Instant>>>,
+    key: &str,
+) -> bool {
+    let now = Instant::now();
+    let mut cache = failed_target_cache.lock().await;
+    cache.retain(|_, expiry| *expiry > now);
+    cache.contains_key(key)
+}
+
+async fn mark_target_failed(failed_target_cache: &Arc<Mutex<HashMap<String, Instant>>>, key: &str) {
+    let mut cache = failed_target_cache.lock().await;
+    cache.insert(key.to_string(), Instant::now() + FAILED_TARGET_TTL);
+}
+
+async fn clear_target_failure(
+    failed_target_cache: &Arc<Mutex<HashMap<String, Instant>>>,
+    key: &str,
+) {
+    let mut cache = failed_target_cache.lock().await;
+    cache.remove(key);
+}
+
+async fn get_target_gate(
+    target_gates: &Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
+    key: &str,
+) -> Arc<Semaphore> {
+    let mut gates = target_gates.lock().await;
+    gates
+        .entry(key.to_string())
+        .or_insert_with(|| Arc::new(Semaphore::new(1)))
+        .clone()
+}
+
+async fn write_socks5_connect_reply(client_stream: &mut TcpStream, reply_code: u8) -> Result<()> {
+    // RFC 1928: 使用 IPv4 0.0.0.0:0 作为 BND.ADDR/BND.PORT，兼容所有请求地址类型。
+    client_stream
+        .write_all(&[
+            SOCKS5_VERSION,
+            reply_code,
+            0x00,
+            SOCKS5_ADDR_TYPE_IPV4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ])
+        .await?;
+    Ok(())
+}
 
 // 工业级 SOCKS5 处理器
 async fn handle_socks5_client(
     mut client_stream: TcpStream,
-    ssh_handle: Arc<Mutex<Handle<SSHClient>>>,
+    ssh_handle: Arc<Handle<SSHClient>>,
+    failed_target_cache: Arc<Mutex<HashMap<String, Instant>>>,
 ) -> Result<()> {
     // 1. 握手阶段 (Handshake)
     let mut header = [0u8; 2];
@@ -596,54 +713,69 @@ async fn handle_socks5_client(
     };
 
     log::debug!("SOCKS5 CONNECT request to {}:{}", target_host, target_port);
+    let key = target_key(&target_host, target_port);
+
+    if is_target_temporarily_blocked(&failed_target_cache, &key).await {
+        log::debug!("目标命中失败缓存，快速拒绝: {}", key);
+        let _ = write_socks5_connect_reply(&mut client_stream, SOCKS5_REPLY_HOST_UNREACHABLE).await;
+        return Err(anyhow::anyhow!("Target temporarily blocked: {}", key));
+    }
 
     // 3. 建立 SSH 隧道
-    // 关键优化：锁的作用域极小，只在建立通道时持有
-    let channel = {
-        let handle = ssh_handle.lock().await;
-        match handle
-            .channel_open_direct_tcpip(
-                target_host.clone(),
-                target_port as u32,
-                "127.0.0.1".to_string(),
-                0,
-            )
-            .await
-        {
-            Ok(c) => c,
-            Err(e) => {
-                // 连接失败响应
-                let _ = client_stream
-                    .write_all(&[SOCKS5_VERSION, 0x04, 0x00, addr_type, 0, 0, 0, 0, 0, 0])
-                    .await;
-                return Err(e.into());
-            }
+    log::debug!("正在打开 SSH 通道到 {}:{}", target_host, target_port);
+    let channel_open_result = timeout(
+        DIRECT_TCPIP_OPEN_TIMEOUT,
+        ssh_handle.channel_open_direct_tcpip(
+            target_host.clone(),
+            target_port as u32,
+            "127.0.0.1".to_string(),
+            0,
+        ),
+    )
+    .await;
+    let channel = match channel_open_result {
+        Ok(Ok(c)) => {
+            log::debug!("SSH 通道打开成功");
+            c
         }
-    }; // Lock released
+        Ok(Err(e)) => {
+            log::error!("SSH 通道打开失败: {}", e);
+            mark_target_failed(&failed_target_cache, &key).await;
+            // 连接失败响应
+            let _ =
+                write_socks5_connect_reply(&mut client_stream, SOCKS5_REPLY_HOST_UNREACHABLE).await;
+            return Err(e.into());
+        }
+        Err(_) => {
+            log::error!("SSH 通道打开超时: {}:{}", target_host, target_port);
+            mark_target_failed(&failed_target_cache, &key).await;
+            let _ =
+                write_socks5_connect_reply(&mut client_stream, SOCKS5_REPLY_HOST_UNREACHABLE).await;
+            return Err(anyhow::anyhow!("SSH direct-tcpip open timeout"));
+        }
+    };
+    clear_target_failure(&failed_target_cache, &key).await;
 
     // 连接成功响应
-    client_stream
-        .write_all(&[SOCKS5_VERSION, 0x00, 0x00, addr_type, 0, 0, 0, 0, 0, 0])
-        .await?;
+    write_socks5_connect_reply(&mut client_stream, SOCKS5_REPLY_SUCCEEDED).await?;
+    log::debug!("SOCKS5 连接响应已发送，开始双向转发");
 
     // 4. 双向转发 (Zero-Copy)
-    let (mut client_read, mut client_write) = client_stream.into_split();
-    let channel_stream = channel.into_stream();
-    let (mut channel_read, mut channel_write) = tokio::io::split(channel_stream);
-
-    // Client -> Server
-    let client_to_server = tokio::spawn(async move {
-        let _ = tokio::io::copy(&mut client_read, &mut channel_write).await;
-        let _ = channel_write.shutdown().await;
-    });
-
-    // Server -> Client
-    let server_to_client = tokio::spawn(async move {
-        let _ = tokio::io::copy(&mut channel_read, &mut client_write).await;
-        let _ = client_write.shutdown().await;
-    });
-
-    let _ = tokio::try_join!(client_to_server, server_to_client);
+    let mut channel_stream = channel.into_stream();
+    match tokio::io::copy_bidirectional(&mut client_stream, &mut channel_stream).await {
+        Ok((client_to_server, server_to_client)) => {
+            log::debug!(
+                "[转发] 双向转发结束，client->server={} bytes, server->client={} bytes",
+                client_to_server,
+                server_to_client
+            );
+        }
+        Err(err) => {
+            log::debug!("[转发] 双向转发异常结束: {err}");
+        }
+    }
+    let _ = client_stream.shutdown().await;
+    let _ = channel_stream.shutdown().await;
 
     Ok(())
 }

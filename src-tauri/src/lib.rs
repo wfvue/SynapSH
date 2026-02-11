@@ -1,10 +1,19 @@
+//! Tauri 后端命令入口，负责 SSH 会话与桌面应用能力编排。
+
 use anyhow::Result;
 use log::info;
 use russh::Disconnect;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::Command;
-use std::sync::{Arc, OnceLock};
+use std::fs;
+use std::net::TcpListener;
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 
 mod db;
@@ -57,18 +66,567 @@ struct BrowserProxyError {
     message: String,
 }
 
+fn emit_browser_proxy_error(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    host: &str,
+    port: u16,
+    message: impl Into<String>,
+) {
+    let payload = BrowserProxyError {
+        session_id: session_id.to_string(),
+        host: host.to_string(),
+        port,
+        message: message.into(),
+    };
+    if let Err(err) = app.emit("browser-proxy-error", payload) {
+        log::warn!("发送 browser-proxy-error 事件失败: {}", err);
+    }
+}
+
+async fn verify_socks5_proxy_connectivity(proxy_port: u16) -> Result<(), String> {
+    let timeout = std::time::Duration::from_millis(800);
+    let mut stream = tokio::time::timeout(timeout, TcpStream::connect(("127.0.0.1", proxy_port)))
+        .await
+        .map_err(|_| "连接本地 SOCKS5 代理超时".to_string())?
+        .map_err(|e| format!("连接本地 SOCKS5 代理失败: {e}"))?;
+
+    tokio::time::timeout(timeout, stream.write_all(&[0x05, 0x01, 0x00]))
+        .await
+        .map_err(|_| "发送 SOCKS5 握手超时".to_string())?
+        .map_err(|e| format!("发送 SOCKS5 握手失败: {e}"))?;
+
+    let mut method_reply = [0u8; 2];
+    tokio::time::timeout(timeout, stream.read_exact(&mut method_reply))
+        .await
+        .map_err(|_| "读取 SOCKS5 握手响应超时".to_string())?
+        .map_err(|e| format!("读取 SOCKS5 握手响应失败: {e}"))?;
+
+    if method_reply != [0x05, 0x00] {
+        return Err(format!(
+            "SOCKS5 握手响应异常: [{:#x}, {:#x}]",
+            method_reply[0], method_reply[1]
+        ));
+    }
+
+    Ok(())
+}
+
 // Implementations moved to ssh.rs
 
 // Helper functions removed (moved to monitor.rs / ssh.rs / utils.rs)
 
 static SESSIONS: OnceLock<Mutex<HashMap<String, Arc<Mutex<SSHSession>>>>> = OnceLock::new();
+static BROWSER_PROCESSES: OnceLock<StdMutex<HashMap<String, BrowserProcess>>> = OnceLock::new();
+static PROXY_SIDECARS: OnceLock<StdMutex<HashMap<String, ProxySidecarPool>>> = OnceLock::new();
+static SESSION_CONNECTIONS: OnceLock<Mutex<HashMap<String, SessionConnectionInfo>>> =
+    OnceLock::new();
+const OPENSH_SIDECAR_POOL_DEFAULT: usize = 2;
+const OPENSH_SIDECAR_POOL_MAX: usize = 4;
+
+struct BrowserProcess {
+    pid: u32,
+    child: Child,
+}
+
+struct ProxySidecar {
+    pid: u32,
+    port: u16,
+    child: Child,
+    askpass_script: Option<PathBuf>,
+    stderr_log: Option<PathBuf>,
+}
+
+struct ProxySidecarPool {
+    sidecars: Vec<ProxySidecar>,
+    next_index: usize,
+}
+
+#[derive(Clone)]
+struct SessionConnectionInfo {
+    host: String,
+    port: u16,
+    username: String,
+    password: Option<String>,
+    private_key: Option<String>,
+}
 
 fn get_sessions() -> &'static Mutex<HashMap<String, Arc<Mutex<SSHSession>>>> {
     SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn get_browser_processes() -> &'static StdMutex<HashMap<String, BrowserProcess>> {
+    BROWSER_PROCESSES.get_or_init(|| StdMutex::new(HashMap::new()))
+}
+
+fn get_proxy_sidecars() -> &'static StdMutex<HashMap<String, ProxySidecarPool>> {
+    PROXY_SIDECARS.get_or_init(|| StdMutex::new(HashMap::new()))
+}
+
+fn get_session_connections() -> &'static Mutex<HashMap<String, SessionConnectionInfo>> {
+    SESSION_CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn openssh_sidecar_pool_size() -> usize {
+    std::env::var("SYNAPSH_SIDECAR_POOL_SIZE")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .map(|size| size.clamp(1, OPENSH_SIDECAR_POOL_MAX))
+        .unwrap_or(OPENSH_SIDECAR_POOL_DEFAULT)
+}
+
+fn cleanup_proxy_sidecar_temp_files(process: &mut ProxySidecar) {
+    if let Some(path) = process.askpass_script.take() {
+        if let Err(err) = fs::remove_file(&path) {
+            log::warn!("清理 SSH_ASKPASS 临时脚本失败: path={:?}, error={}", path, err);
+        }
+    }
+    if let Some(path) = process.stderr_log.take() {
+        if let Err(err) = fs::remove_file(&path) {
+            log::warn!("清理 OpenSSH sidecar 日志失败: path={:?}, error={}", path, err);
+        }
+    }
+}
+
+fn read_sidecar_log_tail(path: &PathBuf) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let lines: Vec<&str> = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let start = lines.len().saturating_sub(4);
+    Some(lines[start..].join(" | "))
+}
+
+fn sidecar_exit_message(process: &ProxySidecar, status: std::process::ExitStatus) -> String {
+    let mut message = format!("OpenSSH sidecar 已退出: status={status}");
+    if let Some(path) = &process.stderr_log {
+        if let Some(tail) = read_sidecar_log_tail(path) {
+            message.push_str(&format!(", stderr={tail}"));
+        }
+    }
+    message
+}
+
+fn prune_stale_sidecars(pool: &mut ProxySidecarPool) {
+    let mut idx = 0usize;
+    while idx < pool.sidecars.len() {
+        if is_proxy_sidecar_running(&mut pool.sidecars[idx]) {
+            idx += 1;
+            continue;
+        }
+        let mut stale = pool.sidecars.remove(idx);
+        cleanup_proxy_sidecar_temp_files(&mut stale);
+    }
+
+    if pool.sidecars.is_empty() {
+        pool.next_index = 0;
+    } else {
+        pool.next_index %= pool.sidecars.len();
+    }
+}
+
+fn take_exited_sidecar_message(session_id: &str, proxy_port: u16) -> Option<String> {
+    let mut guard = get_proxy_sidecars()
+        .lock()
+        .expect("proxy sidecar mutex poisoned");
+
+    let (position, status) = match guard.get_mut(session_id) {
+        Some(pool) => {
+            let index = pool
+                .sidecars
+                .iter()
+                .position(|process| process.port == proxy_port)?;
+            match pool.sidecars[index].child.try_wait() {
+                Ok(Some(status)) => (index, status),
+                Ok(None) => return None,
+                Err(err) => return Some(format!("检测 OpenSSH sidecar 状态失败: {err}")),
+            }
+        }
+        None => return None,
+    };
+
+    let mut remove_session = false;
+    let message = match guard.get_mut(session_id) {
+        Some(pool) => {
+            let mut exited = pool.sidecars.remove(position);
+            let message = sidecar_exit_message(&exited, status);
+            cleanup_proxy_sidecar_temp_files(&mut exited);
+
+            if pool.sidecars.is_empty() {
+                remove_session = true;
+            } else if pool.next_index >= pool.sidecars.len() {
+                pool.next_index %= pool.sidecars.len();
+            }
+
+            message
+        }
+        None => return None,
+    };
+
+    if remove_session {
+        guard.remove(session_id);
+    }
+
+    Some(message)
+}
+
+async fn wait_sidecar_listener_ready(
+    session_id: &str,
+    proxy_port: u16,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + timeout;
+
+    loop {
+        if let Some(reason) = take_exited_sidecar_message(session_id, proxy_port) {
+            return Err(reason);
+        }
+
+        let connect_result = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            TcpStream::connect(("127.0.0.1", proxy_port)),
+        )
+        .await;
+
+        if matches!(connect_result, Ok(Ok(_))) {
+            return Ok(());
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            return Err(format!(
+                "等待 OpenSSH -D sidecar 监听本地端口超时: 127.0.0.1:{proxy_port}"
+            ));
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(180)).await;
+    }
+}
+
+fn is_browser_running(process: &mut BrowserProcess) -> bool {
+    match process.child.try_wait() {
+        Ok(None) => true,
+        Ok(Some(status)) => {
+            log::info!(
+                "检测到浏览器进程已退出: pid={}, status={}",
+                process.pid,
+                status
+            );
+            false
+        }
+        Err(err) => {
+            log::warn!("检测浏览器进程状态失败: pid={}, error={}", process.pid, err);
+            false
+        }
+    }
+}
+
+fn stop_browser_process(process: &mut BrowserProcess) {
+    if !is_browser_running(process) {
+        return;
+    }
+
+    if let Err(err) = process.child.kill() {
+        log::warn!("结束浏览器进程失败: pid={}, error={}", process.pid, err);
+    }
+    if let Err(err) = process.child.wait() {
+        log::warn!("等待浏览器进程退出失败: pid={}, error={}", process.pid, err);
+    } else {
+        log::info!("浏览器进程已结束: pid={}", process.pid);
+    }
+}
+
+fn is_proxy_sidecar_running(process: &mut ProxySidecar) -> bool {
+    match process.child.try_wait() {
+        Ok(None) => true,
+        Ok(Some(status)) => {
+            log::warn!("{}", sidecar_exit_message(process, status));
+            false
+        }
+        Err(err) => {
+            log::warn!(
+                "检测 OpenSSH sidecar 状态失败: pid={}, error={}",
+                process.pid,
+                err
+            );
+            false
+        }
+    }
+}
+
+fn stop_proxy_sidecar(process: &mut ProxySidecar) {
+    if !is_proxy_sidecar_running(process) {
+        cleanup_proxy_sidecar_temp_files(process);
+        return;
+    }
+
+    if let Err(err) = process.child.kill() {
+        log::warn!("结束 OpenSSH sidecar 失败: pid={}, error={}", process.pid, err);
+    }
+    if let Err(err) = process.child.wait() {
+        log::warn!(
+            "等待 OpenSSH sidecar 退出失败: pid={}, error={}",
+            process.pid,
+            err
+        );
+    } else {
+        log::info!("OpenSSH sidecar 已结束: pid={}", process.pid);
+    }
+    cleanup_proxy_sidecar_temp_files(process);
+}
+
+fn close_browser_for_session(session_id: &str) {
+    let mut guard = get_browser_processes()
+        .lock()
+        .expect("browser process mutex poisoned");
+    if let Some(mut process) = guard.remove(session_id) {
+        stop_browser_process(&mut process);
+    }
+}
+
+fn close_proxy_sidecar_for_session(session_id: &str) {
+    let mut guard = get_proxy_sidecars()
+        .lock()
+        .expect("proxy sidecar mutex poisoned");
+    if let Some(mut pool) = guard.remove(session_id) {
+        for mut process in pool.sidecars.drain(..) {
+            stop_proxy_sidecar(&mut process);
+        }
+    }
+}
+
+fn close_all_browser_processes() {
+    let mut guard = get_browser_processes()
+        .lock()
+        .expect("browser process mutex poisoned");
+    for (_, mut process) in guard.drain() {
+        stop_browser_process(&mut process);
+    }
+}
+
+fn close_all_proxy_sidecars() {
+    let mut guard = get_proxy_sidecars()
+        .lock()
+        .expect("proxy sidecar mutex poisoned");
+    for (_, mut pool) in guard.drain() {
+        for mut process in pool.sidecars.drain(..) {
+            stop_proxy_sidecar(&mut process);
+        }
+    }
+}
+
+fn reserve_local_port() -> Result<u16, String> {
+    let listener =
+        TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("分配本地端口失败: {e}"))?;
+    listener
+        .local_addr()
+        .map(|addr| addr.port())
+        .map_err(|e| format!("读取本地端口失败: {e}"))
+}
+
+fn sshpass_available() -> bool {
+    Command::new("sshpass")
+        .arg("-V")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn create_ssh_askpass_script() -> Result<PathBuf, String> {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("读取系统时间失败: {e}"))?
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("synapsh-ssh-askpass-{ts}.sh"));
+    let script = "#!/bin/sh\nprintf '%s\\n' \"$SYNAPSH_SSH_PASSWORD\"\n";
+    fs::write(&path, script).map_err(|e| format!("写入 SSH_ASKPASS 脚本失败: {e}"))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&path)
+            .map_err(|e| format!("读取 SSH_ASKPASS 脚本权限失败: {e}"))?
+            .permissions();
+        perms.set_mode(0o700);
+        fs::set_permissions(&path, perms)
+            .map_err(|e| format!("设置 SSH_ASKPASS 脚本权限失败: {e}"))?;
+    }
+
+    Ok(path)
+}
+
+fn create_sidecar_stderr_log() -> Result<PathBuf, String> {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("读取系统时间失败: {e}"))?
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("synapsh-openssh-sidecar-{ts}.log"));
+    fs::write(&path, "").map_err(|e| format!("创建 sidecar 日志文件失败: {e}"))?;
+    Ok(path)
+}
+
+fn spawn_openssh_sidecar(
+    info: &SessionConnectionInfo,
+    local_port: u16,
+) -> Result<ProxySidecar, String> {
+    let use_password_auth = info.private_key.is_none() && info.password.is_some();
+    let mut askpass_script: Option<PathBuf> = None;
+    let stderr_log = create_sidecar_stderr_log()?;
+
+    let mut args: Vec<String> = vec![
+        "-N".to_string(),
+        "-D".to_string(),
+        format!("127.0.0.1:{local_port}"),
+        "-p".to_string(),
+        info.port.to_string(),
+        "-o".to_string(),
+        "ExitOnForwardFailure=yes".to_string(),
+        "-o".to_string(),
+        "ServerAliveInterval=20".to_string(),
+        "-o".to_string(),
+        "ServerAliveCountMax=3".to_string(),
+        "-o".to_string(),
+        "ConnectTimeout=8".to_string(),
+        "-o".to_string(),
+        "LogLevel=ERROR".to_string(),
+        "-o".to_string(),
+        "StrictHostKeyChecking=no".to_string(),
+        "-o".to_string(),
+        "UserKnownHostsFile=/dev/null".to_string(),
+        "-o".to_string(),
+        "GlobalKnownHostsFile=/dev/null".to_string(),
+    ];
+
+    if let Some(key_path) = &info.private_key {
+        args.push("-i".to_string());
+        args.push(key_path.clone());
+        args.push("-o".to_string());
+        args.push("IdentitiesOnly=yes".to_string());
+        args.push("-o".to_string());
+        args.push("BatchMode=yes".to_string());
+    }
+
+    if use_password_auth {
+        args.push("-o".to_string());
+        args.push("PreferredAuthentications=password,keyboard-interactive".to_string());
+        args.push("-o".to_string());
+        args.push("PubkeyAuthentication=no".to_string());
+    }
+
+    args.push(format!("{}@{}", info.username, info.host));
+
+    let mut cmd = if use_password_auth {
+        let password = info
+            .password
+            .as_ref()
+            .ok_or_else(|| "密码认证参数缺失".to_string())?;
+        if sshpass_available() {
+            let mut c = Command::new("sshpass");
+            c.arg("-p").arg(password).arg("ssh");
+            c
+        } else {
+            let script_path = create_ssh_askpass_script()?;
+            log::info!(
+                "未检测到 sshpass，使用 SSH_ASKPASS 启动 OpenSSH -D sidecar: {:?}",
+                script_path
+            );
+            let mut c = Command::new("ssh");
+            c.env("SSH_ASKPASS_REQUIRE", "force");
+            c.env("SSH_ASKPASS", &script_path);
+            c.env("DISPLAY", ":0");
+            c.env("SYNAPSH_SSH_PASSWORD", password);
+            c.env("LANG", "C");
+            askpass_script = Some(script_path);
+            c
+        }
+    } else {
+        Command::new("ssh")
+    };
+
+    cmd.args(&args);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::null());
+    let stderr_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stderr_log)
+        .map_err(|e| format!("打开 sidecar 日志文件失败: {e}"))?;
+    cmd.stderr(stderr_file);
+
+    let child = cmd.spawn().map_err(|e| {
+        if let Some(path) = askpass_script.take() {
+            let _ = fs::remove_file(path);
+        }
+        let _ = fs::remove_file(&stderr_log);
+        format!("启动 OpenSSH sidecar 失败: {e}")
+    })?;
+    let pid = child.id();
+
+    Ok(ProxySidecar {
+        pid,
+        port: local_port,
+        child,
+        askpass_script,
+        stderr_log: Some(stderr_log),
+    })
+}
+
+fn ensure_openssh_sidecar(session_id: &str, info: &SessionConnectionInfo) -> Result<u16, String> {
+    let mut guard = get_proxy_sidecars()
+        .lock()
+        .expect("proxy sidecar mutex poisoned");
+    let desired = openssh_sidecar_pool_size();
+    let pool = guard
+        .entry(session_id.to_string())
+        .or_insert_with(|| ProxySidecarPool {
+            sidecars: Vec::new(),
+            next_index: 0,
+        });
+
+    prune_stale_sidecars(pool);
+
+    while pool.sidecars.len() > desired {
+        if let Some(mut extra) = pool.sidecars.pop() {
+            stop_proxy_sidecar(&mut extra);
+        }
+    }
+
+    while pool.sidecars.len() < desired {
+        let local_port = reserve_local_port()?;
+        let process = spawn_openssh_sidecar(info, local_port)?;
+        let slot = pool.sidecars.len();
+        log::info!(
+            "启动 OpenSSH -D sidecar: session={}, slot={}/{}, pid={}, port={}",
+            session_id,
+            slot + 1,
+            desired,
+            process.pid,
+            process.port
+        );
+        pool.sidecars.push(process);
+    }
+
+    if pool.sidecars.is_empty() {
+        return Err("OpenSSH sidecar 池为空，无法分配代理端口".to_string());
+    }
+    if pool.next_index >= pool.sidecars.len() {
+        pool.next_index = 0;
+    }
+
+    let selected = pool.next_index;
+    pool.next_index = (pool.next_index + 1) % pool.sidecars.len();
+    Ok(pool.sidecars[selected].port)
+}
+
 // Tauri Commands
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SSHConnectionParams {
     host: String,
     port: u16,
@@ -92,8 +650,8 @@ async fn connect_ssh(
         &params.host,
         params.port,
         &params.username,
-        params.password,
-        params.private_key,
+        params.password.clone(),
+        params.private_key.clone(),
         app,
         session_id.clone(),
     )
@@ -105,7 +663,21 @@ async fn connect_ssh(
 
     let sessions = get_sessions();
     let mut sessions = sessions.lock().await;
-    sessions.insert(session_id, Arc::new(Mutex::new(session)));
+    sessions.insert(session_id.clone(), Arc::new(Mutex::new(session)));
+    drop(sessions);
+
+    let session_connections = get_session_connections();
+    let mut session_connections = session_connections.lock().await;
+    session_connections.insert(
+        session_id.clone(),
+        SessionConnectionInfo {
+            host: params.host,
+            port: params.port,
+            username: params.username,
+            password: params.password,
+            private_key: params.private_key,
+        },
+    );
     info!("会话已保存");
 
     info!("connect_ssh 命令返回 Ok(())");
@@ -152,6 +724,15 @@ async fn disconnect_ssh(session_id: String) -> Result<(), String> {
     if let Some(_session) = sessions.remove(&session_id) {
         // 会话会在 drop 时自动清理
     }
+    drop(sessions);
+
+    let session_connections = get_session_connections();
+    let mut session_connections = session_connections.lock().await;
+    session_connections.remove(&session_id);
+    drop(session_connections);
+
+    close_proxy_sidecar_for_session(&session_id);
+    close_browser_for_session(&session_id);
 
     Ok(())
 }
@@ -163,6 +744,7 @@ async fn browser_open(
     options: Option<BrowserLaunchOptions>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    let browser_open_start = std::time::Instant::now();
     let target_url = normalize_url(&url)?;
     let host = target_url
         .host_str()
@@ -175,71 +757,251 @@ async fn browser_open(
         .and_then(|opt| opt.profile_mode.as_ref())
         .map(|s| s.as_str())
         .unwrap_or("session");
+    let is_new_window = profile_mode == "new";
 
-    let session_arc = {
-        let sessions = get_sessions();
-        let sessions = sessions.lock().await;
-        sessions
+    let session_connection = {
+        let session_connections = get_session_connections();
+        let session_connections = session_connections.lock().await;
+        session_connections
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| "Session not found".to_string())?
+            .ok_or_else(|| "Session connection not found".to_string())?
     };
 
-    let mut session = session_arc.lock().await;
-    if let Err(err) = session.check_direct_tcpip(host, port).await {
-        return Err(format!(
-            "SSH 端口转发失败：{}。请确认远端允许 AllowTcpForwarding 并且能访问目标站点。",
-            err
-        ));
+    let mut proxy_port = match ensure_openssh_sidecar(&session_id, &session_connection) {
+        Ok(port) => port,
+        Err(e) => {
+            let message = format!("启动 OpenSSH -D sidecar 失败：{e}");
+            emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+            return Err(message);
+        }
+    };
+    log::debug!(
+        "OpenSSH -D sidecar 已就绪，prepare_step=ensure_sidecar, elapsed_ms={}",
+        browser_open_start.elapsed().as_millis()
+    );
+
+    if let Err(e) =
+        wait_sidecar_listener_ready(&session_id, proxy_port, std::time::Duration::from_secs(3))
+            .await
+    {
+        let message = format!("OpenSSH -D sidecar 就绪失败：{e}");
+        emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+        return Err(message);
     }
 
-    let proxy_port = session
-        .ensure_socks5_proxy(app, session_id.clone())
-        .await
-        .map_err(|e| format!("启动 SOCKS5 代理失败：{e}"))?;
-    drop(session);
+    let mut preflight_ok = false;
+    let mut last_preflight_error = String::new();
+    let mut restarted_once = false;
+    for attempt in 1..=4 {
+        if let Some(reason) = take_exited_sidecar_message(&session_id, proxy_port) {
+            last_preflight_error = reason;
+            if !restarted_once {
+                restarted_once = true;
+                proxy_port = match ensure_openssh_sidecar(&session_id, &session_connection) {
+                    Ok(new_port) => new_port,
+                    Err(restart_err) => {
+                        let message = format!("OpenSSH -D sidecar 重建失败：{restart_err}");
+                        emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+                        return Err(message);
+                    }
+                };
+                if let Err(wait_err) = wait_sidecar_listener_ready(
+                    &session_id,
+                    proxy_port,
+                    std::time::Duration::from_secs(3),
+                )
+                .await
+                {
+                    let message = format!("OpenSSH -D sidecar 重建后就绪失败：{wait_err}");
+                    emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+                    return Err(message);
+                }
+                continue;
+            }
+            break;
+        }
 
-    let proxy_arg = format!("--proxy-server=socks5://127.0.0.1:{proxy_port}");
+        match verify_socks5_proxy_connectivity(proxy_port).await {
+            Ok(()) => {
+                preflight_ok = true;
+                break;
+            }
+            Err(e) => {
+                last_preflight_error = e;
+                log::warn!(
+                    "OpenSSH -D 代理预检失败（第 {attempt} 次）: {}",
+                    last_preflight_error
+                );
+                if attempt == 3 && !restarted_once {
+                    restarted_once = true;
+                    close_proxy_sidecar_for_session(&session_id);
+                    proxy_port = match ensure_openssh_sidecar(&session_id, &session_connection) {
+                        Ok(new_port) => new_port,
+                        Err(restart_err) => {
+                            let message = format!("OpenSSH -D sidecar 重建失败：{restart_err}");
+                            emit_browser_proxy_error(
+                                &app,
+                                &session_id,
+                                host,
+                                port,
+                                message.clone(),
+                            );
+                            return Err(message);
+                        }
+                    };
+                    if let Err(wait_err) = wait_sidecar_listener_ready(
+                        &session_id,
+                        proxy_port,
+                        std::time::Duration::from_secs(3),
+                    )
+                    .await
+                    {
+                        let message = format!("OpenSSH -D sidecar 重建后就绪失败：{wait_err}");
+                        emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+                        return Err(message);
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            }
+        }
+    }
+
+    if !preflight_ok {
+        let message = format!("OpenSSH -D 代理预检失败：{last_preflight_error}");
+        emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+        return Err(message);
+    }
+    log::info!(
+        "浏览器代理准备完成: session={}, elapsed_ms={}",
+        session_id,
+        browser_open_start.elapsed().as_millis()
+    );
+
     let profile_dir = chrome_profile_dir(&session_id, profile_mode)?;
-    let profile_arg = format!("--user-data-dir={}", profile_dir.display());
+    let track_singleton = profile_mode == "session";
+    let reuse_existing = if track_singleton {
+        let mut processes = get_browser_processes()
+            .lock()
+            .expect("browser process mutex poisoned");
+        let alive = processes
+            .get_mut(&session_id)
+            .map(is_browser_running)
+            .unwrap_or(false);
+        if !alive {
+            processes.remove(&session_id);
+        }
+        alive
+    } else {
+        false
+    };
 
     log::info!("启动 Chrome，代理端口: {}, URL: {}", proxy_port, target_url);
 
     #[cfg(target_os = "macos")]
     {
-        let status = Command::new("open")
-            .args([
-                "-na",
-                "Google Chrome",
-                "--args",
-                &proxy_arg,
-                &profile_arg,
-                "--disable-quic",
-                "--disable-features=VizDisplayCompositor",
-                "--disable-background-networking",
-                "--disable-default-apps",
-                "--disable-extensions",
-                "--disable-sync",
-                "--disable-translate",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--new-window",
-                target_url.as_str(),
-            ])
-            .status()
-            .map_err(|e| e.to_string())?;
+        let chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        let mut cmd = Command::new(chrome_path);
 
-        if !status.success() {
-            return Err("打开 Chrome 失败，请确认已安装 Google Chrome".to_string());
+        cmd.arg(format!("--proxy-server=socks5://127.0.0.1:{proxy_port}"));
+        cmd.arg(format!("--user-data-dir={}", profile_dir.display()));
+        cmd.arg("--disable-quic");
+        cmd.arg("--disable-features=VizDisplayCompositor,OptimizationGuideModelDownloading,OptimizationHintsFetching,AutofillServerCommunication,MediaRouter");
+        cmd.arg("--disable-background-networking");
+        cmd.arg("--disable-default-apps");
+        cmd.arg("--disable-component-update");
+        cmd.arg("--disable-domain-reliability");
+        cmd.arg("--disable-client-side-phishing-detection");
+        cmd.arg("--safebrowsing-disable-auto-update");
+        cmd.arg("--disable-extensions");
+        cmd.arg("--disable-sync");
+        cmd.arg("--disable-translate");
+        cmd.arg("--no-first-run");
+        cmd.arg("--no-default-browser-check");
+        cmd.stdin(Stdio::null());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+
+        if is_new_window {
+            cmd.arg("--new-window");
         }
+        cmd.arg(target_url.as_str());
+
+        log::info!(
+            "启动 Chrome，代理端口: {}, URL: {}, 模式: {}",
+            proxy_port,
+            target_url,
+            if is_new_window {
+                "新建窗口"
+            } else {
+                "复用"
+            }
+        );
+        log::debug!("执行命令: {:?}", cmd);
+
+        let child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                let message = format!("执行 Chrome 失败: {}", e);
+                emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+                return Err(message);
+            }
+        };
+        log::info!(
+            "Chrome 启动命令完成: session={}, elapsed_ms={}",
+            session_id,
+            browser_open_start.elapsed().as_millis()
+        );
+
+        if track_singleton && !reuse_existing {
+            let pid = child.id();
+            let mut processes = get_browser_processes()
+                .lock()
+                .expect("browser process mutex poisoned");
+            processes.insert(session_id.clone(), BrowserProcess { pid, child });
+            log::info!("记录浏览器单实例进程: session={}, pid={}", session_id, pid);
+        } else {
+            // 复用场景下，当前启动命令仅用于把 URL 发送给已存在实例。
+            drop(child);
+        }
+
+        if track_singleton && reuse_existing {
+            log::debug!("复用浏览器单实例: session={}", session_id);
+        }
+
         Ok(())
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (proxy_arg, profile_arg, target_url);
-        Err("当前仅实现 macOS 的 Chrome 启动方案".to_string())
+        let message = "当前仅实现 macOS 的 Chrome 启动方案".to_string();
+        emit_browser_proxy_error(&app, &session_id, host, port, message.clone());
+        Err(message)
     }
+}
+
+#[tauri::command]
+async fn browser_get_proxy_port(session_id: String) -> Result<Option<u16>, String> {
+    let mut sidecars = get_proxy_sidecars()
+        .lock()
+        .map_err(|_| "proxy sidecar mutex poisoned".to_string())?;
+
+    let mut remove_pool = false;
+    let mut port = None;
+    if let Some(pool) = sidecars.get_mut(&session_id) {
+        prune_stale_sidecars(pool);
+        if let Some(process) = pool.sidecars.first() {
+            port = Some(process.port);
+        } else {
+            remove_pool = true;
+        }
+    }
+
+    if remove_pool {
+        sidecars.remove(&session_id);
+    }
+
+    Ok(port)
 }
 
 // 全局数据库实例
@@ -1523,7 +2285,7 @@ async fn create_database_schema(params: CreateDatabaseSchemaParams) -> Result<()
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(
@@ -1543,7 +2305,7 @@ pub fn run() {
                 use tauri::Manager;
                 use tauri_plugin_frame::WebviewWindowExt;
 
-                let app_handle = app.handle().clone();
+                let app_handle = _app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     // 延迟一点确保窗口完全创建
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -1572,6 +2334,7 @@ pub fn run() {
             resize_pty,
             disconnect_ssh,
             browser_open,
+            browser_get_proxy_port,
             list_machines,
             add_machine,
             update_machine,
@@ -1602,6 +2365,14 @@ pub fn run() {
             get_database_schemas,
             create_database_schema
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| match event {
+        tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
+            close_all_browser_processes();
+            close_all_proxy_sidecars();
+        }
+        _ => {}
+    });
 }

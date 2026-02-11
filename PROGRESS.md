@@ -16,6 +16,16 @@
 - [x] 桌面 Shell 框架（桌面图标 + Dock + 状态栏 + 窗口容器）
 - [x] 文件管理 UI 骨架（路径栏 + 工具栏 + 树 + 列表）
 - [x] 浏览器应用（地址栏、导航、历史记录、书签）
+- [x] 浏览器代理链路优化（Chrome 非阻塞启动 + SOCKS5 活性检测重建 + 错误事件回传）
+- [x] 浏览器代理连通性预检与自动重建（SOCKS5 握手探测 + 失败重试）
+- [x] 浏览器交互切换为外部 Chrome 直开（移除应用内浏览器页面）
+- [x] SOCKS5 转发并发优化（移除 SSH Handle 串行锁，提升多资源页面加载速度）
+- [x] 浏览器单实例管理（同一 session 复用 + 应用退出自动关闭）
+- [x] 代理链路性能调优（SSH 参数优化 + copy_bidirectional + 并发限流容错 + 失败目标快速拒绝）
+- [x] 浏览器代理切换为系统 OpenSSH -D sidecar（单隧道复用 + sidecar 生命周期托管）
+- [x] OpenSSH sidecar 稳定性修复（就绪等待 + 自动重建 + stderr 诊断）
+- [x] OpenSSH 浏览器启动提速（预检改为本地 SOCKS 握手，避免目标站点阻塞）
+- [x] OpenSSH 多 sidecar 并行分流（会话级连接池 + 轮询端口分配）
 - [x] 系统设置模块（通用/外观/终端/连接/关于）
 - [x] 升级 russh/russh-sftp 依赖版本
 - [ ] SFTP `read_dir(path)` 后端实现 + JSON 结构
@@ -36,4 +46,3 @@
   - [x] 优化 CPU 图表，显示核心数和统计信息
 - [ ] Sidecar `llama-server` 启动
 - [ ] 本地 HTTP 调用链打通
-

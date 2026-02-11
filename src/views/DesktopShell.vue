@@ -1,3 +1,4 @@
+<!-- 桌面环境主视图：负责图标、窗口管理与应用调度。 -->
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
@@ -33,7 +34,7 @@ const desktopItems: DesktopIconItem[] = [
   { id: "terminal", label: "终端", icon: "icon-[mdi--console]", color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)", app: "terminal" },
   { id: "files", label: "访达", icon: "icon-[mdi--folder]", color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)", app: "files" },
   { id: "database", label: "数据库", icon: "icon-[mdi--database]", color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)", app: "database" },
-  { id: "web", label: "Safari", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
+  { id: "web", label: "浏览器", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
   { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)", app: "settings" },
   { id: "tasks", label: "活动监视器", icon: "icon-[mdi--chart-line]", color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)", app: "monitor" },
   { id: "apps", label: "应用中心", icon: "icon-[mdi--apps]", color: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)", app: "app-center" },
@@ -100,8 +101,8 @@ async function openApp(id: string) {
       browserError.value = "";
       await invoke("browser_open", {
         sessionId: sessionId.value,
-        url: "https://www.baidu.com",
-        options: { profileMode: "new" },
+        url: "https://www.google.com",
+        options: { profileMode: "session" },
       });
     } catch (error) {
       const message = formatInvokeError(error);
