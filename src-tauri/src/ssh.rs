@@ -177,7 +177,7 @@ impl SSHSession {
 
     #[allow(dead_code)]
     pub async fn disconnect(self) -> Result<()> {
-        let mut handle = self.handle.lock().await;
+        let handle = self.handle.lock().await;
         let result = handle.disconnect(Disconnect::ByApplication, "", "").await;
         Ok(result?)
     }
@@ -185,7 +185,7 @@ impl SSHSession {
     /// 执行一次性命令并返回输出
     pub async fn exec_command(&self, command: &str) -> Result<String> {
         let mut channel = {
-            let mut handle = self.handle.lock().await;
+            let handle = self.handle.lock().await;
             let channel: russh::Channel<russh::client::Msg> = handle.channel_open_session().await?;
             channel
         }; // Lock released here!
@@ -211,7 +211,7 @@ impl SSHSession {
     }
 
     pub async fn check_direct_tcpip(&self, host: &str, port: u16) -> Result<()> {
-        let mut handle = self.handle.lock().await;
+        let handle = self.handle.lock().await;
         let channel = handle
             .channel_open_direct_tcpip(host.to_string(), port.into(), "127.0.0.1".to_string(), 0u32)
             .await?;
@@ -245,7 +245,7 @@ impl SSHSession {
             log::info!("[SFTP] Initializing new SFTP session...");
             // Lock scope optimization
             let channel = {
-                let mut handle = self.handle.lock().await;
+                let handle = self.handle.lock().await;
                 handle.channel_open_session().await?
             };
 
@@ -599,8 +599,8 @@ async fn handle_socks5_client(
 
     // 3. 建立 SSH 隧道
     // 关键优化：锁的作用域极小，只在建立通道时持有
-    let mut channel = {
-        let mut handle = ssh_handle.lock().await;
+    let channel = {
+        let handle = ssh_handle.lock().await;
         match handle
             .channel_open_direct_tcpip(
                 target_host.clone(),

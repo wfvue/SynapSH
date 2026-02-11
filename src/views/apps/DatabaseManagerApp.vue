@@ -647,7 +647,7 @@ onMounted(() => {
               </Button>
             </div>
           </div>
-          <div v-if="activeTab === 'mysql' || activeTab === 'mariadb'" class="space-y-2">
+          <div v-if="activeTab === 'mysql'" class="space-y-2">
             <label class="text-sm font-medium">字符集</label>
             <select v-model="formData.charset" class="w-full h-10 px-3 rounded-md border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700">
               <option v-for="cs in charsets" :key="cs.value" :value="cs.value">{{ cs.label }}</option>
