@@ -2288,46 +2288,6 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(
-            tauri_plugin_frame::FramePluginBuilder::new()
-                .titlebar_height(40)
-                .button_width(46)
-                .auto_titlebar(false)
-                .snap_overlay_delay_ms(15)
-                .close_hover_bg("rgba(239,68,68,1)")
-                .button_hover_bg("rgba(255,255,255,0.1)")
-                .build(),
-        )
-        .setup(|_app| {
-            // 手动为主窗口创建覆盖标题栏
-            #[cfg(windows)]
-            {
-                use tauri::Manager;
-                use tauri_plugin_frame::WebviewWindowExt;
-
-                let app_handle = _app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    // 延迟一点确保窗口完全创建
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let result = window.create_overlay_titlebar();
-                        match result {
-                            Ok(_) => {
-                                log::info!("[Frame Plugin] Overlay titlebar created successfully")
-                            }
-                            Err(e) => log::error!(
-                                "[Frame Plugin] Failed to create overlay titlebar: {}",
-                                e
-                            ),
-                        }
-                    } else {
-                        log::warn!("[Frame Plugin] Main window not found");
-                    }
-                });
-            }
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             connect_ssh,
             write_to_pty,

@@ -37,7 +37,14 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
 }
 
 const emit = defineEmits<{
-    connect: [sessionId: string];
+    connect: [
+        payload: {
+            sessionId: string;
+            machineId: string;
+            machineName: string;
+            host: string;
+        }
+    ];
 }>();
 
 interface Machine {
@@ -237,7 +244,12 @@ async function connectToMachine(machine: Machine) {
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error("连接超时 (15秒)")), 15000))
         ]);
-        emit("connect", sessionId);
+        emit("connect", {
+            sessionId,
+            machineId: machine.id,
+            machineName: machine.name || machine.host,
+            host: machine.host,
+        });
     } catch (e) {
         console.error("连接失败:", e);
         error.value = String(e);
