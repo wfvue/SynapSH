@@ -24,7 +24,7 @@ useColorMode({
   modes: { dark: "dark", light: "light", auto: "auto" },
 });
 
-const accentColor = useLocalStorage("appearance-accent-color", "#3b82f6");
+const accentColor = useLocalStorage("appearance-accent-color", "#0a84ff");
 watch(
   accentColor,
   (color) => {
@@ -154,6 +154,7 @@ function resetToSafeState() {
     <TabBar
       :tabs="tabs"
       :active-tab-id="activeTabId"
+      :is-fullscreen="false"
       @new-tab="handleNewTab"
       @switch-tab="handleSwitchTab"
       @close-tab="handleCloseTab"
@@ -201,6 +202,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background-color: #0b0d10;
 }
 
 .main-content {

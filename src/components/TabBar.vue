@@ -1,10 +1,12 @@
 <!--
   TabBar.vue - 顶部标签栏
   原生标题栏覆盖模式下的标签栏，包含标签管理与系统外观快捷设置
+  支持全屏场景下悬停显示
 -->
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useColorMode, useLocalStorage } from "@vueuse/core";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export interface Tab {
     id: string;
@@ -17,6 +19,7 @@ export interface Tab {
 const props = defineProps<{
     tabs: Tab[];
     activeTabId: string;
+    isFullscreen?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +27,8 @@ const emit = defineEmits<{
     (e: "close-tab", id: string): void;
     (e: "new-tab", id: string): void;
 }>();
+
+const isHovered = ref(false);
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -41,9 +46,8 @@ const themeMode = computed<ThemeMode>({
     },
 });
 
-const accentColor = useLocalStorage("appearance-accent-color", "#3b82f6");
+const accentColor = useLocalStorage("appearance-accent-color", "#0a84ff");
 const isAppearanceOpen = ref(false);
-const appearanceMenuRef = ref<HTMLElement | null>(null);
 const platform = ref<"macos" | "windows" | "linux" | "unknown">("unknown");
 const isMac = computed(() => platform.value === "macos");
 const leadingInset = computed(() => (isMac.value ? "84px" : "8px"));
@@ -51,7 +55,7 @@ const trailingInset = computed(() => "8px");
 const contentOffsetClass = computed(() => (isMac.value ? "-translate-y-px" : ""));
 
 const accentColors = [
-    { value: "#3b82f6", name: "蓝色" },
+    { value: "#0a84ff", name: "蓝色" },
     { value: "#22c55e", name: "绿色" },
     { value: "#f59e0b", name: "橙色" },
     { value: "#ef4444", name: "红色" },
@@ -80,40 +84,20 @@ function toggleAppearanceMenu() {
     isAppearanceOpen.value = !isAppearanceOpen.value;
 }
 
-function handleClickOutside(event: MouseEvent) {
-    const target = event.target as Node | null;
-    if (!target) return;
-
-    if (appearanceMenuRef.value && !appearanceMenuRef.value.contains(target)) {
-        isAppearanceOpen.value = false;
-    }
-}
-
 onMounted(() => {
     platform.value = detectPlatform();
     document.documentElement.style.setProperty("--accent-color", accentColor.value);
-    window.addEventListener("mousedown", handleClickOutside);
-});
-
-onUnmounted(() => {
-    window.removeEventListener("mousedown", handleClickOutside);
 });
 </script>
 
 <template>
     <div
-        class="h-10 flex items-center select-none relative bg-sidebar/80 backdrop-blur-xl border-b border-border/50"
+        class="flex items-center select-none bg-sidebar/80 backdrop-blur-xl transition-all duration-300 ease-out"
+        :class="props.isFullscreen 
+            ? 'h-0 opacity-0 overflow-hidden fixed top-0 left-0 right-0 z-50 border-b-0 hover:h-10 hover:opacity-100 hover:border-b hover:border-border/50' 
+            : 'h-10 relative border-b border-border/50'"
         :style="{ paddingLeft: leadingInset, paddingRight: trailingInset }"
     >
-        <div
-            class="w-8 h-8 flex items-center justify-center shrink-0 rounded-lg"
-            :class="contentOffsetClass"
-            data-tauri-drag-region
-        >
-            <div class="size-5 rounded-lg bg-gradient-to-br from-brand to-brand/70 grid place-items-center">
-                <span class="icon-[mdi--lightning-bolt] text-brand-foreground text-xs leading-none"></span>
-            </div>
-        </div>
 
         <div
             class="flex-1 min-w-0 flex items-center overflow-x-auto [&::-webkit-scrollbar]:hidden gap-1 pl-1"
@@ -153,71 +137,68 @@ onUnmounted(() => {
         </div>
 
         <div class="shrink-0 flex items-center gap-1 px-2 no-drag" :class="contentOffsetClass">
-            <div ref="appearanceMenuRef" class="relative">
+            <Dialog :open="isAppearanceOpen" @update:open="(open) => isAppearanceOpen = open">
                 <button
                     class="flex items-center justify-center size-6 rounded-md border-none bg-transparent text-muted-foreground cursor-pointer transition-all duration-150 hover:bg-accent hover:text-foreground"
                     :class="isAppearanceOpen ? 'bg-accent text-foreground' : ''"
                     title="系统外观设置"
-                    @mousedown.stop
-                    @click.stop="toggleAppearanceMenu"
+                    @click="toggleAppearanceMenu"
                 >
                     <span class="icon-[mdi--palette-outline] text-base"></span>
                 </button>
 
-                <div
-                    v-if="isAppearanceOpen"
-                    class="fixed right-3 top-11 z-[9999] w-60 rounded-2xl border border-white/12 bg-[#111827]/95 p-3 shadow-2xl backdrop-blur-2xl no-drag"
-                    @mousedown.stop
-                    @click.stop
-                >
-                    <div class="text-[11px] uppercase tracking-[0.08em] text-neutral-400 mb-2">系统外观</div>
+                <DialogContent class="tab-appearance-dialog w-72 rounded-2xl border p-4">
+                    <DialogHeader class="mb-3">
+                        <DialogTitle class="tab-appearance-title text-base font-medium">外观设置</DialogTitle>
+                    </DialogHeader>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <div class="tab-appearance-label text-xs mb-2">主题模式</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button
+                                    class="tab-appearance-option h-8 rounded-lg text-xs transition-colors border"
+                                    :class="themeMode === 'light' ? 'is-active' : ''"
+                                    @click="themeMode = 'light'"
+                                >
+                                    浅色
+                                </button>
+                                <button
+                                    class="tab-appearance-option h-8 rounded-lg text-xs transition-colors border"
+                                    :class="themeMode === 'dark' ? 'is-active' : ''"
+                                    @click="themeMode = 'dark'"
+                                >
+                                    深色
+                                </button>
+                                <button
+                                    class="tab-appearance-option h-8 rounded-lg text-xs transition-colors border"
+                                    :class="themeMode === 'auto' ? 'is-active' : ''"
+                                    @click="themeMode = 'auto'"
+                                >
+                                    自动
+                                </button>
+                            </div>
+                        </div>
 
-                    <div class="grid grid-cols-3 gap-1 mb-3">
-                        <button
-                            class="h-7 rounded-lg text-xs transition-colors border"
-                            :class="themeMode === 'light'
-                                ? 'bg-blue-500/20 border-blue-400/60 text-blue-100'
-                                : 'bg-white/5 border-white/10 text-neutral-300 hover:bg-white/10'"
-                            @click="themeMode = 'light'"
-                        >
-                            浅色
-                        </button>
-                        <button
-                            class="h-7 rounded-lg text-xs transition-colors border"
-                            :class="themeMode === 'dark'
-                                ? 'bg-blue-500/20 border-blue-400/60 text-blue-100'
-                                : 'bg-white/5 border-white/10 text-neutral-300 hover:bg-white/10'"
-                            @click="themeMode = 'dark'"
-                        >
-                            深色
-                        </button>
-                        <button
-                            class="h-7 rounded-lg text-xs transition-colors border"
-                            :class="themeMode === 'auto'
-                                ? 'bg-blue-500/20 border-blue-400/60 text-blue-100'
-                                : 'bg-white/5 border-white/10 text-neutral-300 hover:bg-white/10'"
-                            @click="themeMode = 'auto'"
-                        >
-                            自动
-                        </button>
+                        <div>
+                            <div class="tab-appearance-label text-xs mb-2">强调色</div>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    v-for="color in accentColors"
+                                    :key="color.value"
+                                    class="tab-appearance-color size-6 rounded-full border transition-transform hover:scale-110"
+                                    :class="accentColor === color.value ? 'is-active' : ''"
+                                    :style="{ backgroundColor: color.value }"
+                                    :title="color.name"
+                                    @click="applyAccentColor(color.value)"
+                                >
+                                    <span v-if="accentColor === color.value" class="icon-[mdi--check] text-[10px] text-white"></span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-
-                    <div class="text-[11px] uppercase tracking-[0.08em] text-neutral-400 mb-2">强调色</div>
-                    <div class="flex items-center gap-2">
-                        <button
-                            v-for="color in accentColors"
-                            :key="color.value"
-                            class="size-5 rounded-full border transition-transform hover:scale-110"
-                            :class="accentColor === color.value ? 'border-white' : 'border-white/20'"
-                            :style="{ backgroundColor: color.value }"
-                            :title="color.name"
-                            @click="applyAccentColor(color.value)"
-                        >
-                            <span v-if="accentColor === color.value" class="icon-[mdi--check] text-[10px] text-white"></span>
-                        </button>
-                    </div>
-                </div>
-            </div>
+                </DialogContent>
+            </Dialog>
         </div>
 
         <div class="w-2 h-8 shrink-0" data-tauri-drag-region></div>
@@ -227,5 +208,46 @@ onUnmounted(() => {
 <style scoped>
 .no-drag {
     -webkit-app-region: no-drag;
+}
+
+.tab-appearance-dialog {
+    border-color: var(--border-strong, rgba(255, 255, 255, 0.18));
+    background: var(--bg-elevated, #1d2430);
+    color: var(--text-primary, #f5f7fa);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.tab-appearance-title {
+    color: var(--text-primary, #f5f7fa);
+}
+
+.tab-appearance-label {
+    color: var(--text-tertiary, #8e97a8);
+}
+
+.tab-appearance-option {
+    border-color: var(--border-subtle, rgba(255, 255, 255, 0.1));
+    color: var(--text-secondary, #c3c9d4);
+    background: transparent;
+}
+
+.tab-appearance-option:hover {
+    background: var(--bg-active, #263042);
+    color: var(--text-primary, #f5f7fa);
+}
+
+.tab-appearance-option.is-active {
+    border-color: var(--accent-color, #0a84ff);
+    background: var(--bg-active, #263042);
+    color: var(--text-primary, #f5f7fa);
+}
+
+.tab-appearance-color {
+    border-color: var(--border-subtle, rgba(255, 255, 255, 0.1));
+}
+
+.tab-appearance-color.is-active {
+    border-color: var(--text-primary, #f5f7fa);
+    box-shadow: 0 0 0 2px var(--bg-elevated, #1d2430), 0 0 0 3px var(--accent-color, #0a84ff);
 }
 </style>

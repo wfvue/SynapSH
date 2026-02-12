@@ -33,7 +33,7 @@ const mode = useColorMode({
 });
 
 // 本地存储外观设置
-const accentColor = useLocalStorage("appearance-accent-color", "#3b82f6");
+const accentColor = useLocalStorage("appearance-accent-color", "#0a84ff");
 const wallpaperId = useLocalStorage("appearance-wallpaper", 0);
 const customWallpapers = useLocalStorage<string[]>("appearance-custom-wallpapers", []);
 
@@ -47,7 +47,7 @@ const theme = computed({
 
 // 强调色选项
 const accentColors = [
-    { value: "#3b82f6", name: "蓝色" },
+    { value: "#0a84ff", name: "蓝色" },
     { value: "#8b5cf6", name: "紫色" },
     { value: "#ec4899", name: "粉色" },
     { value: "#ef4444", name: "红色" },
