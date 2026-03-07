@@ -20,13 +20,18 @@ const terminal = ref<XTerm | null>(null);
 const fitAddon = ref<FitAddon | null>(null);
 let unlistenFn: UnlistenFn | null = null;
 
-// base64 解码
-function base64Decode(base64: string): string {
+// base64 解码为 Uint8Array，正确处理 UTF-8 多字节字符（如中文）
+function base64Decode(base64: string): Uint8Array | null {
   try {
-    return atob(base64);
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    return bytes;
   } catch (e) {
     console.error("Base64 decode error:", e);
-    return "";
+    return null;
   }
 }
 

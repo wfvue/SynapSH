@@ -8,7 +8,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  initialPath: "/root",
+  initialPath: "/",
 });
 
 // 定义事件
@@ -514,52 +514,54 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
     <!-- Header / Toolbar -->
     <header
-      class="flex items-center gap-3 px-4 py-2.5 bg-neutral-800/60 border-b border-neutral-700/50 backdrop-blur-md z-10">
+      class="flex items-center gap-3 px-4 py-2.5 bg-card/60 border-b border-border/50 backdrop-blur-md z-10 text-foreground">
       <!-- Nav Controls -->
       <div class="flex items-center gap-0.5">
         <button
-          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-30 transition text-xl"
+          class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-30 transition text-xl"
           :disabled="historyIndex <= 0" @click="goBack" title="后退">
           <span class="icon-[mdi--chevron-left]"></span>
         </button>
         <button
-          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-30 transition text-xl"
+          class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-30 transition text-xl"
           :disabled="historyIndex >= history.length - 1" @click="goForward" title="前进">
           <span class="icon-[mdi--chevron-right]"></span>
         </button>
-        <button class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl"
+        <button class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition text-xl"
           @click="goUp" title="上级目录">
           <span class="icon-[mdi--arrow-up]"></span>
         </button>
-        <button class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl"
+        <button class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition text-xl"
           @click="refresh" title="刷新">
           <span class="icon-[mdi--refresh]" :class="{ 'animate-spin': isLoading }"></span>
         </button>
       </div>
 
-      <div class="w-px h-5 bg-neutral-700"></div>
+      <div class="w-px h-5 bg-border"></div>
 
       <!-- Path Bar -->
       <div
-        class="flex-1 flex bg-black/30 rounded-lg px-3 py-1.5 border border-white/5 items-center gap-2 overflow-hidden focus-within:ring-1 ring-blue-500/50">
-        <span class="icon-[mdi--folder-home] text-neutral-500 text-base"></span>
+        class="flex-1 flex bg-muted/30 rounded-lg px-3 py-1.5 border border-border/50 items-center gap-2 overflow-hidden focus-within:ring-1 ring-ring/50">
+        <span class="icon-[mdi--folder-home] text-muted-foreground text-base"></span>
         <input v-model="currentPath" @keyup.enter="navigateTo(currentPath)"
-          class="bg-transparent border-none outline-none w-full text-sm text-neutral-300 placeholder-neutral-600 font-mono" />
+          class="bg-transparent border-none outline-none w-full text-sm text-foreground placeholder:-muted-foreground font-mono" />
       </div>
 
       <!-- Search -->
       <div class="relative w-40">
-        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 icon-[mdi--magnify] text-neutral-500 text-base"></span>
+        <span
+          class="absolute left-2.5 top-1/2 -translate-y-1/2 icon-[mdi--magnify] text-muted-foreground text-base"></span>
         <input v-model="searchQuery" placeholder="搜索"
-          class="w-full bg-black/30 border border-white/5 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:bg-black/50 focus:border-white/10 transition-all placeholder-neutral-600" />
+          class="w-full bg-muted/30 border border-border/50 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:bg-muted/50 focus:border-border transition-all placeholder-muted-foreground text-foreground" />
       </div>
 
-      <div class="w-px h-5 bg-neutral-700"></div>
+      <div class="w-px h-5 bg-border"></div>
 
       <!-- Actions -->
       <div class="flex items-center gap-1">
         <button @click="showNewFileModal = true"
-          class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl" title="新建文件">
+          class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition text-xl"
+          title="新建文件">
           <span class="icon-[mdi--file-plus]"></span>
         </button>
         <button @click="createFolder"
@@ -568,12 +570,12 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
         </button>
       </div>
 
-      <div class="w-px h-5 bg-neutral-700"></div>
+      <div class="w-px h-5 bg-border"></div>
 
       <!-- View Toggle -->
-      <div class="flex bg-black/30 rounded-lg p-0.5 gap-0.5 border border-white/5">
+      <div class="flex bg-muted/30 rounded-lg p-0.5 gap-0.5 border border-border/50">
         <button @click="viewMode = 'list'"
-          :class="['p-1.5 rounded-md transition text-lg', viewMode === 'list' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300']"
+          :class="['p-1.5 rounded-md transition text-lg', viewMode === 'list' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground']"
           title="列表视图">
           <span class="icon-[mdi--view-list]"></span>
         </button>
@@ -585,7 +587,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
       </div>
 
       <button @click="showHidden = !showHidden"
-        :class="['p-1.5 rounded-lg transition text-xl', showHidden ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-500 hover:text-white hover:bg-white/10']"
+        :class="['p-1.5 rounded-lg transition text-xl', showHidden ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent']"
         title="显示隐藏文件">
         <span class="icon-[mdi--eye]"></span>
       </button>
@@ -602,27 +604,27 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
       <!-- Sidebar -->
       <aside
-        class="w-52 bg-neutral-800/30 backdrop-blur-sm border-r border-neutral-700/30 flex flex-col py-3 gap-4 overflow-y-auto">
+        class="w-52 bg-card/30 backdrop-blur-sm border-r border-border/30 flex flex-col py-3 gap-4 overflow-y-auto">
         <div class="px-2">
-          <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest px-3 mb-1.5">收藏</div>
+          <div class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-1.5">收藏</div>
           <div class="flex flex-col gap-0.5">
             <button v-for="item in [
-              { path: '/root', icon: 'icon-[mdi--home]', name: '主目录' },
+              { path: '/home', icon: 'icon-[mdi--account-group]', name: '用户目录' },
               { path: '/tmp', icon: 'icon-[mdi--folder-clock]', name: '临时目录' },
               { path: '/var/log', icon: 'icon-[mdi--file-document-outline]', name: '日志' },
               { path: '/etc', icon: 'icon-[mdi--cog]', name: '配置' },
             ]" :key="item.path" @click="navigateTo(item.path)"
-              :class="['flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition', currentPath === item.path ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-400 hover:bg-white/5 hover:text-white']">
+              :class="['flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition', currentPath === item.path ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground']">
               <span :class="item.icon"></span>
               {{ item.name }}
             </button>
           </div>
         </div>
         <div class="px-2">
-          <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest px-3 mb-1.5">系统</div>
+          <div class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-1.5">系统</div>
           <div class="flex flex-col gap-0.5">
             <button @click="navigateTo('/')"
-              :class="['flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition', currentPath === '/' ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-400 hover:bg-white/5 hover:text-white']">
+              :class="['flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition', currentPath === '/' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground']">
               <span class="icon-[mdi--harddisk]"></span>
               根目录
             </button>
@@ -636,14 +638,14 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
         <!-- Loading -->
         <div v-if="isLoading"
-          class="absolute inset-0 flex items-center justify-center bg-neutral-900/60 z-20 backdrop-blur-sm">
-          <span class="icon-[mdi--loading] animate-spin text-4xl text-blue-500"></span>
+          class="absolute inset-0 flex items-center justify-center bg-background/60 z-20 backdrop-blur-sm">
+          <span class="icon-[mdi--loading] animate-spin text-4xl text-primary"></span>
         </div>
 
         <!-- Error -->
         <div v-if="error"
-          class="absolute inset-x-0 top-3 mx-auto w-max max-w-md bg-red-500/10 border border-red-500/50 text-red-200 px-4 py-2.5 rounded-lg flex items-center gap-3 shadow-xl backdrop-blur-md z-30">
-          <span class="icon-[mdi--alert-circle] text-red-400 text-lg"></span>
+          class="absolute inset-x-0 top-3 mx-auto w-max max-w-md bg-destructive/10 border border-destructive/50 text-destructive-foreground px-4 py-2.5 rounded-lg flex items-center gap-3 shadow-xl backdrop-blur-md z-30">
+          <span class="icon-[mdi--alert-circle] text-destructive text-lg"></span>
           <span class="text-sm">{{ error }}</span>
           <button @click="error = null" class="ml-auto hover:bg-red-500/20 rounded p-1">
             <span class="icon-[mdi--close]"></span>
@@ -652,7 +654,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
         <!-- Empty -->
         <div v-if="displayedFiles.length === 0 && !isLoading && !error"
-          class="h-full flex flex-col items-center justify-center text-neutral-600">
+          class="h-full flex flex-col items-center justify-center text-muted-foreground">
           <span class="icon-[mdi--folder-open-outline] text-6xl mb-3 opacity-50"></span>
           <p class="text-sm">文件夹为空</p>
         </div>
@@ -664,23 +666,24 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
           <div v-if="viewMode === 'list'" class="flex flex-col">
             <!-- Header -->
             <div
-              class="grid grid-cols-[24px_1fr_100px_80px_80px] gap-3 px-3 py-1.5 text-[10px] font-medium text-neutral-500 border-b border-white/5 uppercase tracking-wide sticky top-0 bg-neutral-900/90 backdrop-blur-sm z-10">
+              class="grid grid-cols-[24px_1fr_100px_80px_80px] gap-3 px-3 py-1.5 text-[10px] font-medium text-muted-foreground border-b border-border/30 uppercase tracking-wide sticky top-0 bg-background/90 backdrop-blur-sm z-10">
               <span></span>
-              <button @click="toggleSort('name')" class="text-left flex items-center gap-1 hover:text-white transition">
+              <button @click="toggleSort('name')"
+                class="text-left flex items-center gap-1 hover:text-foreground transition">
                 名称
                 <span v-if="sortField === 'name'"
                   :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
                   class="text-xs"></span>
               </button>
               <button @click="toggleSort('modifiedTime')"
-                class="text-right flex items-center justify-end gap-1 hover:text-white transition">
+                class="text-right flex items-center justify-end gap-1 hover:text-foreground transition">
                 修改时间
                 <span v-if="sortField === 'modifiedTime'"
                   :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
                   class="text-xs"></span>
               </button>
               <button @click="toggleSort('size')"
-                class="text-right flex items-center justify-end gap-1 hover:text-white transition">
+                class="text-right flex items-center justify-end gap-1 hover:text-foreground transition">
                 大小
                 <span v-if="sortField === 'size'"
                   :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
@@ -691,7 +694,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
             <!-- Rows -->
             <div v-for="file in displayedFiles" :key="file.id"
               class="grid grid-cols-[24px_1fr_100px_80px_80px] gap-3 items-center px-3 py-1.5 rounded-lg cursor-default transition-colors group border border-transparent"
-              :class="file.isSelected ? 'bg-blue-500/20 border-blue-500/30' : 'hover:bg-white/5 hover:border-white/5'"
+              :class="file.isSelected ? 'bg-primary/20 border-primary/30' : 'hover:bg-accent hover:border-border/30'"
               @click.stop="selectFile(file, $event)" @dblclick="openItem(file)"
               @contextmenu.prevent.stop="onContextMenu($event, file)">
               <span :class="[file.icon, 'text-lg']"></span>
@@ -699,17 +702,18 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
               <div v-if="isRenaming === file.id" class="w-full">
                 <input ref="renameInputRef" v-model="renameValue" @blur="finishRename(file)"
                   @keydown.enter="finishRename(file)" @keydown.esc="isRenaming = null"
-                  class="w-full max-w-[300px] bg-black/50 text-white text-sm border border-blue-500 rounded px-2 py-0.5 outline-none" />
+                  class="w-full max-w-[300px] bg-background text-foreground text-sm border border-primary rounded px-2 py-0.5 outline-none" />
               </div>
-              <span v-else class="text-sm text-neutral-200 group-hover:text-white truncate"
-                :class="{ 'text-neutral-500': file.isHidden }">{{ file.name }}</span>
+              <span v-else class="text-sm text-foreground/80 group-hover:text-foreground truncate"
+                :class="{ 'text-muted-foreground': file.isHidden }">{{ file.name }}</span>
 
-              <span class="text-[11px] text-neutral-500 text-right tabular-nums">{{ formatDate(file.modifiedTime)
+              <span class="text-[11px] text-muted-foreground text-right tabular-nums">{{ formatDate(file.modifiedTime)
               }}</span>
-              <span class="text-[11px] text-neutral-500 text-right tabular-nums">{{ file.type !== 'directory' ?
+              <span class="text-[11px] text-muted-foreground text-right tabular-nums">{{ file.type !== 'directory' ?
                 formatSize(file.size) : '--' }}</span>
-              <span class="text-[11px] text-neutral-500 text-right font-mono">{{ formatPermissions(file.permissions)
-              }}</span>
+              <span class="text-[11px] text-muted-foreground text-right font-mono">{{
+                formatPermissions(file.permissions)
+                }}</span>
             </div>
           </div>
 
@@ -717,7 +721,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
           <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(90px,1fr))] gap-3">
             <div v-for="file in displayedFiles" :key="file.id"
               class="group relative flex flex-col items-center gap-1.5 p-2.5 rounded-xl cursor-default transition-all duration-200 border border-transparent"
-              :class="file.isSelected ? 'bg-blue-500/20 border-blue-500/30 shadow-lg' : 'hover:bg-white/5 hover:border-white/5'"
+              :class="file.isSelected ? 'bg-primary/20 border-primary/30 shadow-lg' : 'hover:bg-accent hover:border-border/30'"
               @click.stop="selectFile(file, $event)" @dblclick="openItem(file)"
               @contextmenu.prevent.stop="onContextMenu($event, file)">
               <span :class="[file.icon, 'text-4xl transition-transform group-hover:scale-110 duration-200']"></span>
@@ -725,11 +729,11 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
               <div v-if="isRenaming === file.id" class="w-full">
                 <input ref="renameInputRef" v-model="renameValue" @blur="finishRename(file)"
                   @keydown.enter="finishRename(file)" @keydown.esc="isRenaming = null"
-                  class="w-full bg-black/50 text-white text-[10px] text-center border border-blue-500 rounded px-1 py-0.5 outline-none" />
+                  class="w-full bg-background text-foreground text-[10px] text-center border border-primary rounded px-1 py-0.5 outline-none" />
               </div>
               <span v-else
-                class="text-[10px] text-neutral-300 text-center break-all line-clamp-2 w-full px-0.5 group-hover:text-white transition-colors"
-                :class="{ 'text-neutral-500': file.isHidden }">
+                class="text-[10px] text-foreground/80 text-center break-all line-clamp-2 w-full px-0.5 group-hover:text-foreground transition-colors"
+                :class="{ 'text-muted-foreground': file.isHidden }">
                 {{ file.name }}
               </span>
             </div>
@@ -739,31 +743,33 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
       <!-- Details Panel -->
       <aside v-if="showDetailsPanel"
-        class="w-56 bg-neutral-800/30 backdrop-blur-sm border-l border-neutral-700/30 p-4 overflow-y-auto">
+        class="w-56 bg-card/30 backdrop-blur-sm border-l border-border/30 p-4 overflow-y-auto">
         <div v-if="detailsFile" class="flex flex-col gap-4">
           <div class="flex flex-col items-center gap-2">
             <span :class="[detailsFile.icon, 'text-6xl']"></span>
             <span class="text-sm font-medium text-center break-all">{{ detailsFile.name }}</span>
           </div>
           <div class="space-y-2 text-xs">
-            <div class="flex justify-between"><span class="text-neutral-500">类型</span><span>{{ detailsFile.type
+            <div class="flex justify-between"><span class="text-muted-foreground">类型</span><span>{{ detailsFile.type
             }}</span></div>
-            <div class="flex justify-between"><span class="text-neutral-500">大小</span><span>{{
+            <div class="flex justify-between"><span class="text-muted-foreground">大小</span><span>{{
               formatSize(detailsFile.size) }}</span></div>
-            <div class="flex justify-between"><span class="text-neutral-500">修改时间</span><span class="text-right">{{
+            <div class="flex justify-between"><span class="text-muted-foreground">修改时间</span><span class="text-right">{{
               formatDate(detailsFile.modifiedTime) }}</span></div>
-            <div class="flex justify-between"><span class="text-neutral-500">权限</span><span class="font-mono">{{
+            <div class="flex justify-between"><span class="text-muted-foreground">权限</span><span class="font-mono">{{
               formatPermissions(detailsFile.permissions) }}</span></div>
-            <div class="flex justify-between"><span class="text-neutral-500">所有者</span><span>{{ detailsFile.owner ||
+            <div class="flex justify-between"><span class="text-muted-foreground">所有者</span><span>{{ detailsFile.owner
+              ||
               '--' }}</span></div>
-            <div class="flex justify-between"><span class="text-neutral-500">组</span><span>{{ detailsFile.group || '--'
-            }}</span></div>
+            <div class="flex justify-between"><span class="text-muted-foreground">组</span><span>{{ detailsFile.group ||
+              '--'
+                }}</span></div>
           </div>
         </div>
-        <div v-else-if="selectedFiles.length > 1" class="text-center text-neutral-500 text-sm">
+        <div v-else-if="selectedFiles.length > 1" class="text-center text-muted-foreground text-sm">
           已选择 {{ selectedFiles.length }} 个项目
         </div>
-        <div v-else class="text-center text-neutral-500 text-sm">
+        <div v-else class="text-center text-muted-foreground text-sm">
           选择文件查看详情
         </div>
       </aside>
@@ -773,7 +779,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
     <Teleport to="body">
       <Transition name="context-menu">
         <div v-if="contextMenu.show"
-          class="context-menu fixed z-[100] min-w-[220px] bg-neutral-800/80 backdrop-blur-2xl border border-white/15 rounded-xl shadow-2xl py-1.5 overflow-hidden"
+          class="context-menu fixed z-[100] min-w-[220px] bg-popover/80 backdrop-blur-2xl border border-border/50 text-popover-foreground rounded-xl shadow-2xl py-1.5 overflow-hidden"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
           <template v-if="contextMenu.targetId">
             <!-- 打开操作 -->
@@ -866,7 +872,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
               { field: 'type', label: '类型' }
             ]" :key="opt.field" @click="toggleSort(opt.field as SortField); hideContextMenu()"
               class="context-menu-item group pl-8">
-              <span v-if="sortField === opt.field" class="absolute left-3 icon-[mdi--check] text-blue-400"></span>
+              <span v-if="sortField === opt.field" class="absolute left-3 icon-[mdi--check] text-primary"></span>
               <span class="flex-1">{{ opt.label }}</span>
             </button>
 
@@ -874,7 +880,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
             <!-- 显示选项 -->
             <button @click="showHidden = !showHidden; hideContextMenu()" class="context-menu-item group">
-              <span v-if="showHidden" class="absolute left-3 icon-[mdi--check] text-blue-400"></span>
+              <span v-if="showHidden" class="absolute left-3 icon-[mdi--check] text-primary"></span>
               <span class="context-menu-icon icon-[mdi--eye] group-hover:scale-110 ml-5"></span>
               <span class="flex-1">显示隐藏文件</span>
               <span class="context-menu-shortcut">⇧⌘.</span>
@@ -887,18 +893,18 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
     <!-- New File Modal -->
     <Teleport to="body">
       <div v-if="showNewFileModal"
-        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200]"
+        class="fixed inset-0 bg-background/60 backdrop-blur-sm flex items-center justify-center z-[200]"
         @click.self="showNewFileModal = false">
-        <div class="bg-neutral-800 border border-white/10 rounded-2xl shadow-2xl w-80 p-5">
+        <div class="bg-popover text-popover-foreground border border-border/50 rounded-2xl shadow-2xl w-80 p-5">
           <div class="text-base font-medium mb-4">新建文件</div>
           <input v-model="newFileName" placeholder="文件名" @keyup.enter="createFile"
-            class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 mb-4"
+            class="w-full bg-muted/30 border border-border/50 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary mb-4"
             autofocus />
           <div class="flex justify-end gap-2">
             <button @click="showNewFileModal = false"
-              class="px-4 py-1.5 text-sm rounded-lg hover:bg-white/10 transition">取消</button>
+              class="px-4 py-1.5 text-sm rounded-lg hover:bg-accent transition">取消</button>
             <button @click="createFile"
-              class="px-4 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 transition">创建</button>
+              class="px-4 py-1.5 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition">创建</button>
           </div>
         </div>
       </div>
@@ -907,25 +913,25 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
     <!-- Chmod Modal -->
     <Teleport to="body">
       <div v-if="showChmodModal"
-        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200]"
+        class="fixed inset-0 bg-background/60 backdrop-blur-sm flex items-center justify-center z-[200]"
         @click.self="showChmodModal = false">
-        <div class="bg-neutral-800 border border-white/10 rounded-2xl shadow-2xl w-80 p-5">
+        <div class="bg-popover text-popover-foreground border border-border/50 rounded-2xl shadow-2xl w-80 p-5">
           <div class="text-base font-medium mb-2">修改权限</div>
-          <div class="text-xs text-neutral-500 mb-4">{{ chmodTargetFile?.name }}</div>
+          <div class="text-xs text-muted-foreground mb-4">{{ chmodTargetFile?.name }}</div>
           <div class="flex items-center gap-2 mb-4">
-            <span class="text-sm text-neutral-400">权限 (八进制):</span>
+            <span class="text-sm text-foreground/80">权限 (八进制):</span>
             <input v-model="chmodValue" placeholder="644" @keyup.enter="applyChmod" maxlength="3"
-              class="w-20 bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-sm font-mono text-center outline-none focus:border-blue-500"
+              class="w-20 bg-muted/30 border border-border/50 rounded-lg px-3 py-1.5 text-sm font-mono text-center outline-none focus:border-primary bg-transparent text-foreground"
               autofocus />
           </div>
-          <div class="text-[10px] text-neutral-500 mb-4">
+          <div class="text-[10px] text-muted-foreground mb-4">
             预览: {{ formatPermissions(chmodValue) }}
           </div>
           <div class="flex justify-end gap-2">
             <button @click="showChmodModal = false"
-              class="px-4 py-1.5 text-sm rounded-lg hover:bg-white/10 transition">取消</button>
+              class="px-4 py-1.5 text-sm rounded-lg hover:bg-accent transition">取消</button>
             <button @click="applyChmod"
-              class="px-4 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 transition">应用</button>
+              class="px-4 py-1.5 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition">应用</button>
           </div>
         </div>
       </div>
@@ -933,9 +939,9 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
     <!-- Footer -->
     <footer
-      class="bg-neutral-800/50 border-t border-white/5 py-1 px-4 text-[10px] text-neutral-500 flex justify-between select-none">
+      class="bg-muted/50 border-t border-border/30 py-1 px-4 text-[10px] text-muted-foreground flex justify-between select-none">
       <span class="flex items-center gap-2">
-        <span class="w-1.5 h-1.5 rounded-full" :class="props.sessionId ? 'bg-green-500' : 'bg-red-500'"></span>
+        <span class="w-1.5 h-1.5 rounded-full" :class="props.sessionId ? 'bg-success' : 'bg-destructive'"></span>
         {{ props.sessionId ? '已连接' : '未连接' }}
       </span>
       <span class="flex gap-4">
@@ -952,8 +958,8 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
   width: 100%;
   display: flex;
   flex-direction: column;
-  background: #171717;
-  color: #e5e5e5;
+  background: var(--background);
+  color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   user-select: none;
   overflow: hidden;
@@ -994,22 +1000,22 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
   gap: 10px;
   padding: 6px 14px;
   font-size: 13px;
-  color: #e5e5e5;
+  color: var(--foreground);
   transition: all 0.15s ease;
 }
 
 .context-menu-item:hover {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .context-menu-item-danger {
-  color: #fca5a5;
+  color: var(--destructive);
 }
 
 .context-menu-item-danger:hover {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
+  background: var(--destructive);
+  color: var(--destructive-foreground);
 }
 
 .context-menu-icon {
@@ -1021,19 +1027,20 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
 
 .context-menu-shortcut {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--muted-foreground);
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   margin-left: auto;
   flex-shrink: 0;
 }
 
 .context-menu-item:hover .context-menu-shortcut {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--primary-foreground);
 }
 
 .context-menu-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background: var(--border);
+  opacity: 0.5;
   margin: 4px 12px;
 }
 
@@ -1042,7 +1049,7 @@ const detailsFile = computed(() => selectedFiles.value.length === 1 ? selectedFi
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--muted-foreground);
   padding: 6px 14px 4px;
 }
 

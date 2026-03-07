@@ -73,6 +73,7 @@ const editorFile = ref<EditorFile | null>(null);
 
 // 应用状态管理
 const openApps = ref<AppId[]>([]);
+const minimizedApps = ref<AppId[]>([]);
 const focusedApp = ref<AppId | null>(null);
 const desktopIconsRef = ref<InstanceType<typeof DesktopIcons> | null>(null);
 let unlistenProxyError: UnlistenFn | null = null;
@@ -113,6 +114,13 @@ async function openApp(id: string) {
   }
   if (!openApps.value.includes(appId)) {
     openApps.value.push(appId);
+  } else {
+    if (minimizedApps.value.includes(appId)) {
+      minimizedApps.value = minimizedApps.value.filter((a) => a !== appId);
+    } else if (focusedApp.value === appId) {
+      minimizeApp(appId);
+      return;
+    }
   }
   focusApp(appId);
 }
@@ -128,14 +136,29 @@ function openFileInEditor(filePath: string, fileName: string) {
 
 function focusApp(id: AppId) {
   if (!openApps.value.includes(id)) return;
+  if (minimizedApps.value.includes(id)) {
+    minimizedApps.value = minimizedApps.value.filter((a) => a !== id);
+  }
   openApps.value = openApps.value.filter((item) => item !== id).concat(id);
   focusedApp.value = id;
 }
 
 function closeApp(id: AppId) {
   openApps.value = openApps.value.filter((item) => item !== id);
+  minimizedApps.value = minimizedApps.value.filter((item) => item !== id);
   if (focusedApp.value === id) {
-    focusedApp.value = openApps.value.length ? openApps.value[openApps.value.length - 1] : null;
+    const visibleApps = openApps.value.filter((a) => !minimizedApps.value.includes(a));
+    focusedApp.value = visibleApps.length ? visibleApps[visibleApps.length - 1] : null;
+  }
+}
+
+function minimizeApp(id: AppId) {
+  if (!minimizedApps.value.includes(id)) {
+    minimizedApps.value.push(id);
+  }
+  if (focusedApp.value === id) {
+    const visibleApps = openApps.value.filter((a) => !minimizedApps.value.includes(a));
+    focusedApp.value = visibleApps.length ? visibleApps[visibleApps.length - 1] : null;
   }
 }
 
@@ -184,41 +207,37 @@ onUnmounted(() => {
 
     <!-- 窗口层 -->
     <AppWindow v-for="app in openApps" :key="app" :app-id="app" :title="appTitles[app]" :active="focusedApp === app"
-        :offset="getWindowOffset(app)" :z-index="getWindowZIndex(app)"
-        :custom-chrome="app === 'settings'"
-        @close="closeApp(app)" @focus="focusApp(app)" v-slot="windowProps">
-        <!-- 终端应用 -->
-          <TerminalApp v-if="app === 'terminal'" :session-id="sessionId" />
+      :offset="getWindowOffset(app)" :z-index="getWindowZIndex(app)" :minimized="minimizedApps.includes(app)"
+      @close="closeApp(app)" @minimize="minimizeApp(app)" @focus="focusApp(app)" v-slot="windowProps">
+      <!-- 终端应用 -->
+      <TerminalApp v-if="app === 'terminal'" :session-id="sessionId" />
 
-        <!-- 文件管理器 -->
-        <FilesApp v-else-if="app === 'files'" :session-id="sessionId" @open-file="openFileInEditor" />
+      <!-- 文件管理器 -->
+      <FilesApp v-else-if="app === 'files'" :session-id="sessionId" @open-file="openFileInEditor" />
 
-        <!-- 活动监视器 -->
-        <ActivityMonitor v-else-if="app === 'monitor'" :session-id="sessionId" />
+      <!-- 活动监视器 -->
+      <ActivityMonitor v-else-if="app === 'monitor'" :session-id="sessionId" />
 
-        <!-- 文本编辑器 -->
-        <TextEditorApp v-else-if="app === 'editor' && editorFile" :session-id="sessionId" :file-path="editorFile.path"
-          :file-name="editorFile.name" />
+      <!-- 文本编辑器 -->
+      <TextEditorApp v-else-if="app === 'editor' && editorFile" :session-id="sessionId" :file-path="editorFile.path"
+        :file-name="editorFile.name" />
 
-        <!-- 系统设置 -->
-        <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" v-bind="windowProps" />
+      <!-- 系统设置 -->
+      <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" :close="() => closeApp(app)"
+        :minimize="() => minimizeApp(app)" :maximize="() => focusApp(app)" :start-drag="() => { }" />
 
-        <!-- 数据库管理 -->
-        <DatabaseManagerApp v-else-if="app === 'database'" :session-id="sessionId" />
+      <!-- 数据库管理 -->
+      <DatabaseManagerApp v-else-if="app === 'database'" :session-id="sessionId" />
 
-        <!-- 其他应用占位 -->
-        <div v-else class="app-empty">
-          <h2>正在准备</h2>
-          <p>这个模块会作为系统级 App 扩展加入。</p>
-        </div>
+      <!-- 其他应用占位 -->
+      <div v-else class="app-empty">
+        <h2>正在准备</h2>
+        <p>这个模块会作为系统级 App 扩展加入。</p>
+      </div>
     </AppWindow>
 
     <!-- Dock 栏 -->
     <DesktopDock :items="dockItems" :open-apps="openApps" @open-app="openApp" />
-
-    <!-- 状态栏 -->
-    <!-- 状态栏 (Moved to top) -->
-    <!-- <DesktopStatusBar :is-connected="isConnected" /> -->
   </div>
 </template>
 
@@ -246,5 +265,4 @@ onUnmounted(() => {
   font-size: 1.5rem;
   color: var(--foreground);
 }
-
 </style>

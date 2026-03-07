@@ -116,6 +116,10 @@ onUnmounted(() => {
                 class="absolute w-[120%] h-[240px] left-[-10%] rounded-full opacity-22 blur-[20px] bottom-[32%] bg-gradient-to-r from-sky-300/60 to-teal-300/20"></span>
             <span
                 class="absolute w-[120%] h-[240px] left-[-10%] rounded-full opacity-22 blur-[20px] bottom-[18%] bg-gradient-to-r from-blue-500/20 to-amber-400/50"></span>
+
+            <!-- 科技网格纹理 overlay -->
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.6)_100%),linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:100%_100%,32px_32px,32px_32px]"
+                style="mask-image: linear-gradient(to bottom, black 20%, transparent 100%);"></div>
         </template>
     </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, onMounted, onUnmounted, watch } from "vue";
 import TrafficLights from "./TrafficLights.vue";
 
 const props = defineProps<{
@@ -11,6 +11,7 @@ const props = defineProps<{
     statusText?: string;
     statusOnline?: boolean;
     customChrome?: boolean;
+    minimized?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -18,13 +19,87 @@ const emit = defineEmits<{
     focus: [];
     minimize: [];
     maximize: [];
+    restore: [];
 }>();
 
-// Constants
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
 
-// 全局 Body Class Cursor 覆盖 (解决 WebView Cursor 问题)
+const isMaximized = ref(false);
+const isFullscreen = ref(false);
+const isMinimized = ref(false);
+const savedPosition = ref({ x: 0, y: 0, width: 0, height: 0 });
+const buttonPressState = ref<"minimize" | "maximize" | "close" | null>(null);
+
+const windowWidth = ref(0);
+const windowHeight = ref(0);
+const windowX = ref(0);
+const windowY = ref(0);
+const isResizing = ref(false);
+const resizeDirection = ref("");
+const isDragging = ref(false);
+
+const defaultSizes: Record<string, { width: number; height: number }> = {
+    terminal: { width: 1120, height: 720 },
+    files: { width: 980, height: 680 },
+    monitor: { width: 1000, height: 700 },
+    settings: { width: 860, height: 560 },
+    "app-center": { width: 860, height: 560 },
+    browser: { width: 980, height: 640 },
+};
+
+const windowStyle = computed(() => {
+    if (isFullscreen.value) {
+        return {
+            width: "100%",
+            height: "100%",
+            top: "0",
+            left: "0",
+            zIndex: props.zIndex,
+        };
+    }
+    if (isMaximized.value) {
+        return {
+            width: "100%",
+            height: "100%",
+            top: "0",
+            left: "0",
+            zIndex: props.zIndex,
+        };
+    }
+    return {
+        width: `${windowWidth.value}px`,
+        height: `${windowHeight.value}px`,
+        top: `${windowY.value}px`,
+        left: `${windowX.value}px`,
+        zIndex: props.zIndex,
+    };
+});
+
+const windowClass = computed(() => [
+    "fixed rounded-lg border border-white/10 backdrop-blur-xl transition-all duration-200 bg-background/95",
+    `app-window--${props.appId}`,
+    {
+        'shadow-[0_32px_64px_rgba(0,0,0,0.5),0_2px_12px_rgba(0,0,0,0.2)]': props.active && !isMaximized.value && !props.minimized,
+        'shadow-[0_8px_32px_rgba(0,0,0,0.3)]': !props.active && !isMaximized.value && !props.minimized,
+        'shadow-none border-0 rounded-none': isMaximized.value || isFullscreen.value,
+        'transition-none select-none': (isResizing.value || isDragging.value) && !props.minimized,
+        'border-none bg-transparent shadow-[0_10px_30px_rgba(0,0,0,0.3)]': props.customChrome && !props.minimized,
+        'scale-[0.98]': buttonPressState.value === "minimize",
+        'cursor-default': isMaximized.value || isFullscreen.value,
+        'opacity-0 pointer-events-none scale-95 translate-y-4': props.minimized,
+    },
+]);
+
+const resizeHandlesVisible = computed(() => !isMaximized.value && !isFullscreen.value && !props.customChrome);
+
+const headerClass = computed(() => [
+    "flex items-center justify-between pl-4 pr-0 h-[36px] bg-transparent select-none",
+    { 'cursor-grab active:cursor-grabbing': !isMaximized.value && !isFullscreen.value },
+    { 'rounded-none': isMaximized.value || isFullscreen.value },
+    { 'rounded-t-lg': !isMaximized.value && !isFullscreen.value },
+]);
+
 function setResizeCursor(direction: string) {
     const cursorClass = `cursor-${direction}-resize`;
     document.body.classList.add(cursorClass);
@@ -36,59 +111,96 @@ function handleMouseLeave() {
 
 function resetCursor() {
     document.body.classList.remove(
-        "cursor-n-resize",
-        "cursor-s-resize",
-        "cursor-e-resize",
-        "cursor-w-resize",
-        "cursor-ne-resize",
-        "cursor-nw-resize",
-        "cursor-se-resize",
-        "cursor-sw-resize"
+        "cursor-n-resize", "cursor-s-resize", "cursor-e-resize", "cursor-w-resize",
+        "cursor-ne-resize", "cursor-nw-resize", "cursor-se-resize", "cursor-sw-resize"
     );
 }
 
-// 窗口大小和位置状态
-const windowWidth = ref(0);
-const windowHeight = ref(0);
-const windowX = ref(0);
-const windowY = ref(0);
-const isResizing = ref(false);
-const resizeDirection = ref("");
-const isDragging = ref(false);
+function saveNormalState() {
+    savedPosition.value = {
+        x: windowX.value,
+        y: windowY.value,
+        width: windowWidth.value,
+        height: windowHeight.value,
+    };
+}
 
-// 初始化窗口尺寸
-const defaultSizes: Record<string, { width: number; height: number }> = {
-    terminal: { width: 1120, height: 720 },
-    files: { width: 980, height: 680 },
-    monitor: { width: 1000, height: 700 },
-    settings: { width: 860, height: 560 },
-    "app-center": { width: 860, height: 560 },
-    browser: { width: 980, height: 640 },
-};
+function handleMinimize() {
+    buttonPressState.value = "minimize";
+    isMinimized.value = true;
+    emit("minimize");
+    setTimeout(() => {
+        isMinimized.value = false;
+        buttonPressState.value = null;
+    }, 150);
+}
 
-const windowStyle = computed(() => ({
-    width: `${windowWidth.value}px`,
-    height: `${windowHeight.value}px`,
-    top: `${windowY.value}px`,
-    left: `${windowX.value}px`,
-    zIndex: props.zIndex,
-}));
+function handleMaximize() {
+    buttonPressState.value = "maximize";
+    if (isMaximized.value) {
+        windowX.value = savedPosition.value.x;
+        windowY.value = savedPosition.value.y;
+        windowWidth.value = savedPosition.value.width;
+        windowHeight.value = savedPosition.value.height;
+        isMaximized.value = false;
+        emit("restore");
+    } else {
+        saveNormalState();
+        isMaximized.value = true;
+        emit("maximize");
+    }
+    setTimeout(() => {
+        buttonPressState.value = null;
+    }, 150);
+}
 
-// 初始化窗口位置
+function handleClose() {
+    buttonPressState.value = "close";
+    emit("close");
+    setTimeout(() => {
+        buttonPressState.value = null;
+    }, 150);
+}
+
 onMounted(() => {
     const size = defaultSizes[props.appId] || { width: 860, height: 560 };
     windowWidth.value = Math.min(size.width, window.innerWidth * 0.92);
     windowHeight.value = Math.min(size.height, window.innerHeight * 0.8);
-
-    // 计算居中位置
     windowX.value = (window.innerWidth - windowWidth.value) / 2 + props.offset;
     windowY.value = window.innerHeight * 0.08 + props.offset;
+
+    savedPosition.value = {
+        x: windowX.value,
+        y: windowY.value,
+        width: windowWidth.value,
+        height: windowHeight.value,
+    };
+
+    window.addEventListener('resize', handleWindowResize);
 });
 
-// 拖拽处理
+onUnmounted(() => {
+    window.removeEventListener('resize', handleWindowResize);
+});
+
+function handleWindowResize() {
+    if (!isMaximized.value && !isFullscreen.value) {
+        const maxWidth = window.innerWidth - 40;
+        const maxHeight = window.innerHeight - 40;
+        if (windowWidth.value > maxWidth) windowWidth.value = maxWidth;
+        if (windowHeight.value > maxHeight) windowHeight.value = maxHeight;
+    }
+}
+
+watch(() => props.active, (active) => {
+    if (active && isMinimized.value) {
+        isMinimized.value = false;
+    }
+});
+
 function startDrag(e: MouseEvent) {
-    // 如果点击的是按钮，不启动拖拽
     if ((e.target as HTMLElement).closest('button')) return;
+    if (isMaximized.value || isFullscreen.value) return;
 
     e.preventDefault();
     isDragging.value = true;
@@ -109,16 +221,14 @@ function startDrag(e: MouseEvent) {
         const deltaX = currentX - startX;
         const deltaY = currentY - startY;
 
-        windowX.value = startWindowX + deltaX;
-        windowY.value = Math.max(0, startWindowY + deltaY); // 防止拖出顶部
+        windowX.value = Math.max(0, startWindowX + deltaX);
+        windowY.value = Math.max(0, startWindowY + deltaY);
     }
 
     function handleMouseMove(e: MouseEvent) {
         if (!isDragging.value) return;
-
         currentX = e.clientX;
         currentY = e.clientY;
-
         if (!rafId) {
             rafId = requestAnimationFrame(updatePosition);
         }
@@ -126,9 +236,7 @@ function startDrag(e: MouseEvent) {
 
     function handleMouseUp() {
         isDragging.value = false;
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-        }
+        if (rafId) cancelAnimationFrame(rafId);
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
     }
@@ -137,8 +245,9 @@ function startDrag(e: MouseEvent) {
     document.addEventListener('mouseup', handleMouseUp);
 }
 
-// Resize 处理 - 使用 requestAnimationFrame 优化性能
 function startResize(e: MouseEvent, direction: string) {
+    if (isMaximized.value || isFullscreen.value || props.customChrome) return;
+
     e.preventDefault();
     e.stopPropagation();
     isResizing.value = true;
@@ -163,43 +272,40 @@ function startResize(e: MouseEvent, direction: string) {
         const deltaY = currentY - startY;
 
         if (resizeDirection.value.includes("e")) {
-            windowWidth.value = Math.max(MIN_WIDTH, startWidth + deltaX);
+            windowWidth.value = Math.max(MIN_WIDTH, Math.min(startWidth + deltaX, window.innerWidth - windowX.value - 20));
         }
         if (resizeDirection.value.includes("s")) {
-            windowHeight.value = Math.max(MIN_HEIGHT, startHeight + deltaY);
+            windowHeight.value = Math.max(MIN_HEIGHT, Math.min(startHeight + deltaY, window.innerHeight - windowY.value - 20));
         }
         if (resizeDirection.value.includes("w")) {
             const newWidth = Math.max(MIN_WIDTH, startWidth - deltaX);
-            // 只有当宽度确实变化时才更新 X 坐标
             if (newWidth !== startWidth) {
                 const intendedWidth = startWidth - deltaX;
-                if (intendedWidth >= MIN_WIDTH) {
+                if (intendedWidth >= MIN_WIDTH && windowX.value + intendedWidth < window.innerWidth - 10) {
                     windowWidth.value = intendedWidth;
                     windowX.value = startWindowX + deltaX;
                 } else {
                     windowWidth.value = MIN_WIDTH;
-                    windowX.value = startWindowX + (startWidth - MIN_WIDTH);
+                    windowX.value = Math.max(0, startWindowX + (startWidth - MIN_WIDTH));
                 }
             }
         }
         if (resizeDirection.value.includes("n")) {
             const intendedHeight = startHeight - deltaY;
-            if (intendedHeight >= MIN_HEIGHT) {
+            if (intendedHeight >= MIN_HEIGHT && windowY.value + intendedHeight < window.innerHeight - 10) {
                 windowHeight.value = intendedHeight;
                 windowY.value = startWindowY + deltaY;
             } else {
                 windowHeight.value = MIN_HEIGHT;
-                windowY.value = startWindowY + (startHeight - MIN_HEIGHT);
+                windowY.value = Math.max(0, startWindowY + (startHeight - MIN_HEIGHT));
             }
         }
     }
 
     function handleMouseMove(e: MouseEvent) {
         if (!isResizing.value) return;
-
         currentX = e.clientX;
         currentY = e.clientY;
-
         if (!rafId) {
             rafId = requestAnimationFrame(updateSize);
         }
@@ -208,9 +314,7 @@ function startResize(e: MouseEvent, direction: string) {
     function handleMouseUp() {
         isResizing.value = false;
         resizeDirection.value = "";
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-        }
+        if (rafId) cancelAnimationFrame(rafId);
         document.removeEventListener("mousemove", handleMouseMove);
         document.removeEventListener("mouseup", handleMouseUp);
     }
@@ -218,94 +322,87 @@ function startResize(e: MouseEvent, direction: string) {
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
 }
-
 </script>
 
 <template>
-    <div class="fixed rounded-[18px] border border-border/40 shadow-2xl backdrop-blur-2xl transition-shadow bg-background/90"
-        :class="[`app-window--${appId}`, { 'shadow-[0_28px_80px_rgba(0,0,0,0.5)]': active, 'transition-none select-none': isResizing || isDragging, 'border-none bg-transparent shadow-[0_10px_30px_rgba(0,0,0,0.3)]': customChrome }]"
-        :style="windowStyle" :data-resize-dir="isResizing ? resizeDirection : ''" @mousedown="emit('focus')">
+    <div class="fixed" :class="windowClass" :style="windowStyle" :data-resize-dir="isResizing ? resizeDirection : ''"
+        @mousedown="emit('focus')">
+        <header v-if="!customChrome" :class="headerClass" @mousedown="startDrag">
+            <!-- Windows 风格标题 (居左) -->
+            <div class="flex items-center gap-2">
+                <div class="text-[12px] text-foreground/80 tracking-wide font-medium">
+                    {{ title }}
+                </div>
+                <!-- 在线状态指示 -->
+                <div v-if="statusText" class="flex items-center gap-1.5 ml-2">
+                    <span class="text-[11px] text-muted-foreground">
+                        {{ statusText }}
+                    </span>
+                </div>
+            </div>
 
-        <header v-if="!customChrome"
-            class="grid grid-cols-[120px_1fr_160px] items-center px-4 py-3 border-b border-white/5 bg-[#121620]/80 rounded-t-[18px] select-none cursor-grab active:cursor-grabbing"
-            @mousedown="startDrag">
-            <TrafficLights
-                @close="emit('close')"
-                @minimize="emit('minimize')"
-                @maximize="emit('maximize')"
-            />
-            <div class="text-center text-[0.9rem] tracking-[0.08em] text-muted-foreground uppercase">{{ title }}</div>
-            <div class="flex justify-end">
-                <span v-if="statusText"
-                    class="text-[0.72rem] px-2.5 py-1 rounded-full bg-white/10 text-muted-foreground"
-                    :class="{ 'bg-[rgba(94,234,212,0.18)] text-[#bff4ea]': statusOnline }">
-                    {{ statusText }}
-                </span>
+            <!-- 控制按钮 (紧贴右上角) -->
+            <div class="flex items-center h-full">
+                <TrafficLights :is-maximized="isMaximized" :is-fullscreen="isFullscreen" @minimize="handleMinimize"
+                    @maximize="handleMaximize" @close="handleClose" />
             </div>
         </header>
 
-        <div class="overflow-auto rounded-b-[18px] flex flex-col" :class="[
-            customChrome ? 'h-full rounded-[18px]' : 'h-[calc(100%-48px)]',
-            { 'pointer-events-none': isResizing || isDragging }
+        <div class="overflow-auto flex flex-col" :class="[
+            customChrome ? 'h-full' : 'h-[calc(100%-36px)]',
+            { 'pointer-events-none': isResizing || isDragging },
+            { 'rounded-none h-full': isMaximized || isFullscreen },
+            { 'rounded-b-lg': !isMaximized && !isFullscreen }
         ]">
-            <slot :start-drag="startDrag" :close="() => emit('close')" :minimize="() => emit('minimize')"
-                :maximize="() => emit('maximize')" />
+            <slot :start-drag="startDrag" :close="handleClose" :minimize="handleMinimize" :maximize="handleMaximize"
+                :is-maximized="isMaximized" :is-fullscreen="isFullscreen" />
         </div>
 
+        <template v-if="resizeHandlesVisible">
+            <div class="absolute z-[99999] pointer-events-auto left-4 right-4 -top-2 h-4 cursor-ns-resize"
+                @mouseenter="setResizeCursor('n')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'n')">
+            </div>
+            <div class="absolute z-[99999] pointer-events-auto left-4 right-4 -bottom-2 h-4 cursor-ns-resize"
+                @mouseenter="setResizeCursor('s')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 's')">
+            </div>
+            <div class="absolute z-[99999] pointer-events-auto top-4 bottom-4 -right-2 w-4 cursor-ew-resize"
+                @mouseenter="setResizeCursor('e')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'e')">
+            </div>
+            <div class="absolute z-[99999] pointer-events-auto top-4 bottom-4 -left-2 w-4 cursor-ew-resize"
+                @mouseenter="setResizeCursor('w')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'w')">
+            </div>
 
-        <!-- Resize handles -->
-        <!-- North -->
-        <div class="absolute z-[99999] pointer-events-auto left-4 right-4 -top-2 h-4 cursor-ns-resize"
-            @mouseenter="setResizeCursor('n')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'n')">
-        </div>
-        <!-- South -->
-        <div class="absolute z-[99999] pointer-events-auto left-4 right-4 -bottom-2 h-4 cursor-ns-resize"
-            @mouseenter="setResizeCursor('s')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 's')">
-        </div>
-        <!-- East -->
-        <div class="absolute z-[99999] pointer-events-auto top-4 bottom-4 -right-2 w-4 cursor-ew-resize"
-            @mouseenter="setResizeCursor('e')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'e')">
-        </div>
-        <!-- West -->
-        <div class="absolute z-[99999] pointer-events-auto top-4 bottom-4 -left-2 w-4 cursor-ew-resize"
-            @mouseenter="setResizeCursor('w')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'w')">
-        </div>
-
-        <!-- Corner Handles & Visuals -->
-        <!-- NE -->
-        <div class="absolute z-[99999] pointer-events-auto -top-2 -right-2 w-8 h-8 cursor-nesw-resize group flex items-start justify-end p-1"
-            @mouseenter="setResizeCursor('ne')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'ne')">
-            <span
-                class="iconify mdi--resize-bottom-right rotate-180 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
-        </div>
-        <!-- NW -->
-        <div class="absolute z-[99999] pointer-events-auto -top-2 -left-2 w-8 h-8 cursor-nwse-resize group flex items-start justify-start p-1"
-            @mouseenter="setResizeCursor('nw')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'nw')">
-            <span
-                class="iconify mdi--resize-bottom-right rotate-[270deg] text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
-        </div>
-        <!-- SE -->
-        <div class="absolute z-[99999] pointer-events-auto -bottom-2 -right-2 w-8 h-8 cursor-nwse-resize group flex items-end justify-end p-1"
-            @mouseenter="setResizeCursor('se')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'se')">
-            <span
-                class="iconify mdi--resize-bottom-right text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
-        </div>
-        <!-- SW -->
-        <div class="absolute z-[99999] pointer-events-auto -bottom-2 -left-2 w-8 h-8 cursor-nesw-resize group flex items-end justify-start p-1"
-            @mouseenter="setResizeCursor('sw')" @mouseleave="handleMouseLeave" @mousedown="startResize($event, 'sw')">
-            <span
-                class="iconify mdi--resize-bottom-right rotate-90 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
-        </div>
+            <div class="absolute z-[99999] pointer-events-auto -top-2 -right-2 w-8 h-8 cursor-nesw-resize group flex items-start justify-end p-1"
+                @mouseenter="setResizeCursor('ne')" @mouseleave="handleMouseLeave"
+                @mousedown="startResize($event, 'ne')">
+                <span
+                    class="iconify mdi--resize-bottom-right rotate-180 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+            </div>
+            <div class="absolute z-[99999] pointer-events-auto -top-2 -left-2 w-8 h-8 cursor-nwse-resize group flex items-start justify-start p-1"
+                @mouseenter="setResizeCursor('nw')" @mouseleave="handleMouseLeave"
+                @mousedown="startResize($event, 'nw')">
+                <span
+                    class="iconify mdi--resize-bottom-right rotate-[270deg] text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+            </div>
+            <div class="absolute z-[99999] pointer-events-auto -bottom-2 -right-2 w-8 h-8 cursor-nwse-resize group flex items-end justify-end p-1"
+                @mouseenter="setResizeCursor('se')" @mouseleave="handleMouseLeave"
+                @mousedown="startResize($event, 'se')">
+                <span
+                    class="iconify mdi--resize-bottom-right text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+            </div>
+            <div class="absolute z-[99999] pointer-events-auto -bottom-2 -left-2 w-8 h-8 cursor-nesw-resize group flex items-end justify-start p-1"
+                @mouseenter="setResizeCursor('sw')" @mouseleave="handleMouseLeave"
+                @mousedown="startResize($event, 'sw')">
+                <span
+                    class="iconify mdi--resize-bottom-right rotate-90 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+            </div>
+        </template>
     </div>
 </template>
 
-<style scoped>
-/* Remove scoped styles as they are replaced by Tailwind */
-</style>
+<style scoped></style>
 
 <style>
-/* Global cursor overrides */
-/* Global cursor overrides using SVG Data URIs for reliability */
 body.cursor-n-resize,
 body.cursor-s-resize {
     cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path fill="black" stroke="white" stroke-width="1.5" d="M16 4l-6 8h4v8h-4l6 8 6-8h-4v-8h4z"/></svg>') 16 16, ns-resize !important;

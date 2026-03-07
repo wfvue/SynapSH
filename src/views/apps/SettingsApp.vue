@@ -9,7 +9,6 @@ import AppearancePanel from "./settings/AppearancePanel.vue";
 import TerminalPanel from "./settings/TerminalPanel.vue";
 import ConnectionPanel from "./settings/ConnectionPanel.vue";
 import AboutPanel from "./settings/AboutPanel.vue";
-import TrafficLights from "@/components/desktop/TrafficLights.vue";
 import { Input } from "@/components/ui/input";
 
 defineProps<{
@@ -53,13 +52,6 @@ const currentPanelLabel = computed(() => {
         <!-- 侧边栏 -->
         <aside class="flex flex-col bg-muted/30 border-r border-border backdrop-blur-xl pt-3">
             <div class="px-4 pb-2 flex flex-col gap-3 drag-region" @mousedown="startDrag">
-                <!-- Mac Traffic Lights -->
-                <TrafficLights
-                    @close="close?.()"
-                    @minimize="minimize?.()"
-                    @maximize="maximize?.()"
-                />
-
                 <div class="relative px-2 pb-2">
                     <span
                         class="icon-[mdi--magnify] absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground text-base pointer-events-none z-10"></span>
@@ -89,7 +81,7 @@ const currentPanelLabel = computed(() => {
 
         <!-- 内容区域 -->
         <main class="flex flex-col h-full overflow-hidden bg-background/50">
-            <div class="flex-1 overflow-y-auto w-full">
+            <div class="flex-1 overflow-y-auto w-full pt-4">
                 <GeneralPanel v-if="activePanel === 'general'" />
                 <AppearancePanel v-else-if="activePanel === 'appearance'" />
                 <TerminalPanel v-else-if="activePanel === 'terminal'" />

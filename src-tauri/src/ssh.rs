@@ -170,7 +170,20 @@ impl SSHSession {
         };
         log::info!("会话通道已打开");
 
-        log::info!("跳过 PTY 请求，直接请求 Shell...");
+        // 请求 PTY（伪终端），使 Shell 以交互模式运行
+        log::info!("请求 PTY...");
+        match channel
+            .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
+            .await
+        {
+            Ok(_) => log::info!("PTY 请求成功"),
+            Err(e) => {
+                log::error!("PTY 请求失败: {:?}", e);
+                return Err(anyhow::anyhow!("Failed to request PTY: {:?}", e));
+            }
+        }
+
+        log::info!("请求 Shell...");
         match channel.request_shell(false).await {
             Ok(_) => log::info!("Shell 请求成功"),
             Err(e) => {

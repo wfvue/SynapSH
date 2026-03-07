@@ -30,15 +30,14 @@ function handleDblClick() {
 
 <template>
     <button
-        class="flex flex-col items-center gap-1.5 p-2 rounded-lg transition-colors w-24 hover:bg-white/20 select-none cursor-pointer group bg-transparent border-none outline-none focus:outline-none"
-        :class="{ 'bg-white/10': selected }" @click.stop="handleClick" @dblclick.stop="handleDblClick">
+        class="flex flex-col items-center gap-1 p-2 rounded transition-colors w-24 hover:bg-white/10 select-none cursor-pointer group bg-transparent border border-transparent outline-none focus:outline-none"
+        :class="{ 'bg-blue-500/30 border-blue-500/40 hover:bg-blue-500/40': selected }" @click.stop="handleClick"
+        @dblclick.stop="handleDblClick">
 
-        <AppIcon :icon="item.icon" :background="item.color" :size="56"
-            class="group-hover:scale-105 group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.25),0_2px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.25)] transition-transform duration-200 ease-out" />
+        <AppIcon :icon="item.icon" :background="item.color" :size="48"
+            class="transition-transform duration-200 ease-out mb-1" />
 
-        <span
-            class="text-[12px] text-white/90 text-center drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] max-w-full truncate px-1 rounded leading-tight"
-            :class="{ 'bg-[#0061D8] text-white': selected }">
+        <span class="text-[12px] text-white text-center drop-shadow-md max-w-full truncate px-1 rounded leading-tight">
             {{ item.label }}
         </span>
     </button>

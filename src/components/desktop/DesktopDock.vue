@@ -30,17 +30,27 @@ function handleClick(app: string | undefined) {
 
 <template>
     <section
-        class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-end gap-2 px-3 py-2 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-3xl z-40 transition-all duration-300">
+        class="absolute bottom-0 left-0 w-full h-[48px] px-2 flex items-center justify-center gap-1 bg-background/80 backdrop-blur-2xl border-t border-white/10 z-50">
+
+        <!-- 开始按钮占位 -->
+        <button
+            class="relative flex items-center justify-center w-[40px] h-[40px] rounded hover:bg-white/10 active:bg-white/15 transition-all duration-150 border-none bg-transparent cursor-pointer group flex-shrink-0 mr-2"
+            title="开始">
+            <span
+                class="icon-[mdi--microsoft-windows] text-2xl text-blue-500 group-hover:scale-105 transition-transform"></span>
+        </button>
+
         <button v-for="item in items" :key="item.id"
-            class="relative flex items-center justify-center transition-all duration-200 hover:-translate-y-2 hover:scale-110 active:translate-y-[-2px] border-none bg-transparent cursor-pointer group origin-bottom"
-            :class="{ '-translate-y-0.5': item.app && openApps.includes(item.app) }" :title="item.label"
-            :style="{ width: `${dockIconSize}px`, height: `${dockIconSize}px` }" @click.stop="handleClick(item.app)">
+            class="relative flex items-center justify-center w-[40px] h-[40px] rounded hover:bg-white/10 active:bg-white/15 transition-all duration-150 border-none bg-transparent cursor-pointer group flex-shrink-0"
+            :class="{ 'bg-white/[0.06]': item.app && openApps.includes(item.app) }" :title="item.label"
+            @click.stop="handleClick(item.app)">
 
-            <AppIcon :icon="item.icon" :background="item.color" :size="dockIconSize"
-                class="shadow-md group-hover:brightness-110" />
+            <AppIcon :icon="item.icon" :background="item.color" :size="28" :no-shadow="true"
+                class="transition-transform group-hover:scale-95 group-active:scale-90" />
 
-            <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-white/80 shadow-sm"
-                v-if="item.app && openApps.includes(item.app)"></span>
+            <!-- Win11 Pill Indicator -->
+            <span class="absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] rounded-t-full transition-all duration-300"
+                :class="item.app && openApps.includes(item.app) ? 'bg-[#0078d4] w-4 opacity-100' : 'bg-white/40 opacity-0 group-hover:opacity-100 group-hover:w-[6px] w-1.5'"></span>
         </button>
     </section>
 </template>

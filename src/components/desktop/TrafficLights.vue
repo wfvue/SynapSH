@@ -1,8 +1,13 @@
 <!--
-  TrafficLights.vue - macOS 风格交通灯按钮组件
-  红黄绿三色窗口控制按钮，支持悬停显示图标
+  TrafficLights.vue - Windows 风格窗口控制按钮组件
+  方形窗口控制按钮：最小化、最大化/还原、关闭
 -->
 <script setup lang="ts">
+defineProps<{
+    isMaximized?: boolean;
+    isFullscreen?: boolean;
+}>();
+
 const emit = defineEmits<{
     close: [];
     minimize: [];
@@ -11,24 +16,27 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <div class="flex gap-2 group">
+    <div class="flex h-full">
+        <!-- 最小化 -->
         <button
-            class="w-4 h-4 rounded-full bg-[#ff5f56] border border-[#e0443e] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
-            @click.stop="emit('close')"
-        >
-            <span class="icon-[mdi--close] opacity-0 group-hover:opacity-100 text-[10px] text-black/50 leading-none"></span>
+            class="w-[46px] h-full bg-transparent flex items-center justify-center transition-colors duration-100 hover:bg-white/10 active:bg-white/20 border-none outline-none focus:outline-none"
+            @click.stop="emit('minimize')" title="最小化">
+            <span class="icon-[mdi--minus] text-[16px] text-foreground/80 opacity-80"></span>
         </button>
+        <!-- 最大化/还原 -->
         <button
-            class="w-4 h-4 rounded-full bg-[#ffbd2e] border border-[#dea123] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
-            @click.stop="emit('minimize')"
-        >
-            <span class="icon-[mdi--minus] opacity-0 group-hover:opacity-100 text-[8px] text-black/50 leading-none"></span>
+            class="w-[46px] h-full bg-transparent flex items-center justify-center transition-colors duration-100 hover:bg-white/10 active:bg-white/20 border-none outline-none focus:outline-none"
+            @click.stop="emit('maximize')" :title="isMaximized ? '还原向下' : '最大化'">
+            <span v-if="isMaximized"
+                class="icon-[mdi--window-restore] text-[14px] text-foreground/80 opacity-80"></span>
+            <span v-else class="icon-[mdi--checkbox-blank-outline] text-[14px] text-foreground/80 opacity-80"></span>
         </button>
+        <!-- 关闭 -->
         <button
-            class="w-4 h-4 rounded-full bg-[#27c93f] border border-[#1aab29] flex items-center justify-center overflow-hidden transition-all hover:brightness-90 active:brightness-75"
-            @click.stop="emit('maximize')"
-        >
-            <span class="icon-[mdi--square-outline] opacity-0 group-hover:opacity-100 text-[7px] text-black/50 leading-none"></span>
+            class="w-[46px] h-full bg-transparent flex items-center justify-center transition-colors duration-100 hover:bg-[#c42b1c] hover:text-white group rounded-tr-lg border-none outline-none focus:outline-none"
+            :class="{ 'rounded-none': isMaximized }" @click.stop="emit('close')" title="关闭">
+            <span
+                class="icon-[mdi--close] text-[16px] text-foreground/80 opacity-80 group-hover:text-white group-hover:opacity-100"></span>
         </button>
     </div>
 </template>
