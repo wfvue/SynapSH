@@ -3,9 +3,6 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 
-// @ts-expect-error process is a nodejs global
-const host = process.env.TAURI_DEV_HOST;
-
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [vue(), tailwindcss()],
@@ -15,25 +12,15 @@ export default defineConfig(async () => ({
     },
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent Vite from obscuring rust errors
+  // Vite options for Electron development
   clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 19000,
     strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-        protocol: "ws",
-        host,
-        port: 19001,
-      }
-      : undefined,
+    host: false,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 告诉 Vite 忽略监听 Electron 和构建产物目录，避免无限刷新
+      ignored: ["**/dist-electron/**", "**/dist/**", "**/release/**"],
     },
   },
 }));
