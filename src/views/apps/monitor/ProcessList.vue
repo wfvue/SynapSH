@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 
 export interface ProcessInfo {
     pid: number;
@@ -121,7 +121,7 @@ async function handleKillProcess(pid: number, event: Event) {
     
     killingPid.value = pid;
     try {
-        await invoke("kill_process", { sessionId: props.sessionId, pid, signal: 15 });
+        await api.killProcess(props.sessionId, pid, 15);
     } catch (e) {
         console.error("Failed to kill process:", e);
         alert(`终止进程失败: ${e}`);
@@ -136,7 +136,7 @@ async function handleForceKill(pid: number, event: Event) {
     
     killingPid.value = pid;
     try {
-        await invoke("kill_process", { sessionId: props.sessionId, pid, signal: 9 });
+        await api.killProcess(props.sessionId, pid, 9);
     } catch (e) {
         console.error("Failed to force kill process:", e);
         alert(`强制终止进程失败: ${e}`);

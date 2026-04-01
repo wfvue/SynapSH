@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, watch, onUnmounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 
 interface Props {
   sessionId?: string;
@@ -198,10 +198,7 @@ async function fetchFiles(path: string) {
   error.value = null;
 
   try {
-    const res = await invoke<{ entries: FileEntry[], path: string, parentPath?: string }>("list_files", {
-      sessionId: props.sessionId,
-      path: path
-    });
+    const res = await api.listFiles(props.sessionId, path);
 
     files.value = res.entries
       .filter(e => !IGNORED_FILES.includes(e.name))
@@ -322,7 +319,7 @@ async function createFolder() {
   try {
     const name = "新建文件夹";
     const path = `${currentPath.value}/${name}`;
-    await invoke("create_folder", { sessionId: props.sessionId, path });
+    await api.createFolder(props.sessionId, path);
     await fetchFiles(currentPath.value);
     // Auto start rename
     const newFolder = files.value.find(f => f.name === name);
@@ -339,7 +336,7 @@ async function createFile() {
   if (!props.sessionId || !newFileName.value.trim()) return;
   try {
     const path = `${currentPath.value}/${newFileName.value.trim()}`;
-    await invoke("create_file", { sessionId: props.sessionId, path, content: null });
+    await api.createFile(props.sessionId, path);
     await fetchFiles(currentPath.value);
     showNewFileModal.value = false;
     newFileName.value = "";
@@ -363,14 +360,16 @@ async function finishRename(file: FileItem) {
     return;
   }
 
+  if (!props.sessionId) {
+    error.value = "Session not available";
+    isRenaming.value = null;
+    return;
+  }
+
   try {
     const oldPath = file.path;
     const newPath = `${currentPath.value}/${renameValue.value.trim()}`;
-    await invoke("rename_file", {
-      sessionId: props.sessionId,
-      oldPath,
-      newPath
-    });
+    await api.renameFile(props.sessionId, oldPath, newPath);
     await fetchFiles(currentPath.value);
   } catch (err: any) {
     error.value = "重命名失败: " + err;
@@ -387,11 +386,7 @@ async function deleteSelected() {
 
   try {
     for (const file of selectedFiles.value) {
-      await invoke("delete_file_or_folder", {
-        sessionId: props.sessionId,
-        path: file.path,
-        isDirectory: file.type === "directory"
-      });
+      await api.deleteFile(props.sessionId, file.path, file.type === "directory");
     }
     await fetchFiles(currentPath.value);
   } catch (err: any) {
@@ -415,11 +410,7 @@ async function applyChmod() {
       error.value = "无效的权限值";
       return;
     }
-    await invoke("chmod_file", {
-      sessionId: props.sessionId,
-      path: chmodTargetFile.value.path,
-      mode
-    });
+    await api.chmodFile(props.sessionId, chmodTargetFile.value.path, mode);
     await fetchFiles(currentPath.value);
     showChmodModal.value = false;
   } catch (err: any) {
@@ -432,10 +423,7 @@ async function downloadFile(file: FileItem) {
   hideContextMenu();
 
   try {
-    const base64Content = await invoke<string>("download_file", {
-      sessionId: props.sessionId,
-      remotePath: file.path
-    });
+    const base64Content = await api.downloadFile(props.sessionId, file.path);
 
     // Decode and trigger download
     const binaryString = atob(base64Content);

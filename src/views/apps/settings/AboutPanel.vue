@@ -3,19 +3,10 @@
   显示应用版本信息和系统信息
 -->
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { getVersion } from "@tauri-apps/api/app";
+import { ref } from "vue";
 
 const appVersion = ref("1.0.0");
 const buildDate = "2026-02-07";
-
-onMounted(async () => {
-    try {
-        appVersion.value = await getVersion();
-    } catch (e) {
-        console.warn("Failed to get app version:", e);
-    }
-});
 
 const links = [
     { label: "GitHub 仓库", url: "https://github.com", icon: "icon-[mdi--github]" },
@@ -73,12 +64,12 @@ const links = [
                     <span>Vue 3</span>
                 </div>
                 <div class="flex items-center gap-2 px-3 py-2 bg-secondary/20 rounded-lg text-sm">
-                    <span class="icon-[mdi--language-rust] text-xl text-[#dea584]"></span>
-                    <span>Rust</span>
+                    <span class="icon-[mdi--electron-framework] text-xl text-[#47848f]"></span>
+                    <span>Electron</span>
                 </div>
                 <div class="flex items-center gap-2 px-3 py-2 bg-secondary/20 rounded-lg text-sm">
-                    <span class="icon-[mdi--application-brackets] text-xl text-[#ffc131]"></span>
-                    <span>Tauri</span>
+                    <span class="icon-[mdi--nodejs] text-xl text-[#68a063]"></span>
+                    <span>Node.js</span>
                 </div>
                 <div class="flex items-center gap-2 px-3 py-2 bg-secondary/20 rounded-lg text-sm">
                     <span class="icon-[mdi--language-typescript] text-xl text-[#3178c6]"></span>

@@ -3,7 +3,7 @@
   展示进程详细信息，支持进程操作（终止、暂停、恢复）
 -->
 <script setup lang="ts">
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 import type { ProcessInfo } from "./ProcessList.vue";
 
 const props = defineProps<{
@@ -55,11 +55,7 @@ async function handleKill(signal: number) {
     if (!confirm(`确定要向进程 ${props.process.pid} 发送 ${signalName} 信号吗？`)) return;
     
     try {
-        await invoke("kill_process", { 
-            sessionId: props.sessionId, 
-            pid: props.process.pid, 
-            signal 
-        });
+        await api.killProcess(props.sessionId, props.process.pid, signal);
         emit('killed', props.process.pid);
         emit('close');
     } catch (e) {

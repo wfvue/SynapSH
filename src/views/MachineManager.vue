@@ -5,7 +5,7 @@
  * 使用 shadcn-vue 组件 + 自定义卡片布局
  */
 import { ref, onMounted, computed } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 
 // shadcn-vue components
 import { Button } from "@/components/ui/button";
@@ -14,27 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-
-// Check if running in Tauri
-// In Tauri v2, we should check for __TAURI_INTERNALS__ or just assume it's available if we are in the app window
-const isTauri = typeof window !== 'undefined' && (
-    !!(window as any).__TAURI_INTERNALS__ ||
-    !!(window as any).__TAURI__ ||
-    !!(window as any).__TAURI_IPC__
-);
-
-async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-    // If check fails, we still try to invoke but catch the error specifically
-    try {
-        return await invoke<T>(cmd, args);
-    } catch (e) {
-        if (!isTauri) {
-            console.warn(`[MachineManager] Tauri not available, skipping invoke: ${cmd}`);
-            throw new Error("Tauri 环境不可用 (浏览器模式)");
-        }
-        throw e;
-    }
-}
 
 const emit = defineEmits<{
     connect: [
@@ -54,12 +33,12 @@ interface Machine {
     port: number;
     username: string;
     password?: string;
-    private_key_path?: string;
-    auth_type: string;
+    privateKeyPath?: string;
+    authType: string;
     tags: string;
     os: string;
-    created_at: string;
-    updated_at: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 interface MachineInput {
@@ -68,8 +47,8 @@ interface MachineInput {
     port?: number;
     username: string;
     password?: string;
-    private_key_path?: string;
-    auth_type: string;
+    privateKeyPath?: string;
+    authType: string;
     tags?: string[];
     os?: string;
 }
@@ -94,8 +73,8 @@ const newMachine = ref<MachineInput>({
     port: 22,
     username: "root",
     password: "",
-    private_key_path: "",
-    auth_type: "password",
+    privateKeyPath: "",
+    authType: "password",
     tags: [],
     os: "linux",
 });
@@ -139,7 +118,7 @@ async function loadMachines() {
     isLoading.value = true;
     error.value = "";
     try {
-        machines.value = await safeInvoke<Machine[]>("list_machines");
+        machines.value = await api.listMachines();
         machineStatus.value = {};
     } catch (e) {
         error.value = String(e);
@@ -150,7 +129,7 @@ async function loadMachines() {
 
 async function handleAddMachine() {
     try {
-        const machine = await safeInvoke<Machine>("add_machine", { input: newMachine.value });
+        const machine = await api.addMachine(JSON.parse(JSON.stringify(newMachine.value)));
         machines.value.unshift(machine);
         showAddModal.value = false;
         resetForm();
@@ -168,14 +147,11 @@ async function handleUpdateMachine() {
             port: editingMachine.value.port,
             username: editingMachine.value.username,
             password: editingMachine.value.password,
-            private_key_path: editingMachine.value.private_key_path,
-            auth_type: editingMachine.value.auth_type,
+            privateKeyPath: editingMachine.value.privateKeyPath,
+            authType: editingMachine.value.authType,
             os: editingMachine.value.os,
         };
-        const updated = await safeInvoke<Machine>("update_machine", {
-            id: editingMachine.value.id,
-            input
-        });
+        const updated = await api.updateMachine(editingMachine.value.id, input);
         const idx = machines.value.findIndex(m => m.id === updated.id);
         if (idx !== -1) {
             machines.value[idx] = updated;
@@ -190,7 +166,7 @@ async function handleUpdateMachine() {
 async function handleDeleteMachine() {
     if (!deletingMachine.value) return;
     try {
-        await safeInvoke("delete_machine", { id: deletingMachine.value.id });
+        await api.deleteMachine(deletingMachine.value.id);
         machines.value = machines.value.filter(m => m.id !== deletingMachine.value!.id);
         showDeleteConfirm.value = false;
         deletingMachine.value = null;
@@ -202,12 +178,12 @@ async function handleDeleteMachine() {
 async function testConnection(machine: Machine) {
     machineStatus.value[machine.id] = 'testing';
     try {
-        const result = await safeInvoke<boolean>("test_connection", {
+        const result = await api.testConnection({
             host: machine.host,
             port: machine.port,
             username: machine.username,
             password: machine.password,
-            privateKey: machine.private_key_path
+            privateKey: machine.privateKeyPath
         });
         machineStatus.value[machine.id] = result ? 'online' : 'offline';
     } catch (e) {
@@ -226,21 +202,18 @@ async function connectToMachine(machine: Machine) {
     const sessionId = `session_${machine.id}_${Date.now()}`;
     
     // 根据认证类型选择正确的凭据，避免空字符串导致后端误判
-    const isKeyAuth = machine.auth_type === 'key';
-    const password = !isKeyAuth && machine.password ? machine.password : null;
-    const privateKey = isKeyAuth && machine.private_key_path ? machine.private_key_path : null;
+    const isKeyAuth = machine.authType === 'key';
+    const password = !isKeyAuth && machine.password ? machine.password : undefined;
+    const privateKey = isKeyAuth && machine.privateKeyPath ? machine.privateKeyPath : undefined;
     
     try {
         await Promise.race([
-            safeInvoke("connect_ssh", {
-                sessionId,
-                params: {
-                    host: machine.host,
-                    port: machine.port,
-                    username: machine.username,
-                    password: password,
-                    privateKey: privateKey  // 使用 camelCase，后端 serde 会自动转换
-                }
+            api.connectSSH(sessionId, {
+                host: machine.host,
+                port: machine.port,
+                username: machine.username,
+                password: password,
+                privateKey: privateKey
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error("连接超时 (15秒)")), 15000))
         ]);
@@ -276,8 +249,8 @@ function resetForm() {
         port: 22,
         username: "root",
         password: "",
-        private_key_path: "",
-        auth_type: "password",
+        privateKeyPath: "",
+        authType: "password",
         tags: [],
         os: "linux",
     };
@@ -507,7 +480,7 @@ onMounted(() => {
                             <div class="flex justify-between items-center pt-3 border-t border-border">
                                 <span class="text-xs text-muted-foreground flex items-center gap-1">
                                     <span class="icon-[lucide--clock] size-3"></span>
-                                    {{ formatLastUpdated(machine.updated_at) }}
+                                    {{ formatLastUpdated(machine.updatedAt) }}
                                 </span>
                                 <Button size="sm" @click.stop="connectToMachine(machine)"
                                     :disabled="isConnecting === machine.id">
@@ -555,20 +528,20 @@ onMounted(() => {
                         <div class="space-y-1.5">
                             <label class="text-sm font-medium">认证方式</label>
                             <div class="flex gap-2">
-                                <Button :variant="newMachine.auth_type === 'password' ? 'default' : 'outline'" size="sm"
-                                    class="flex-1" @click="newMachine.auth_type = 'password'">密码</Button>
-                                <Button :variant="newMachine.auth_type === 'key' ? 'default' : 'outline'" size="sm"
-                                    class="flex-1" @click="newMachine.auth_type = 'key'">密钥</Button>
+                                <Button :variant="newMachine.authType === 'password' ? 'default' : 'outline'" size="sm"
+                                    class="flex-1" @click="newMachine.authType = 'password'">密码</Button>
+                                <Button :variant="newMachine.authType === 'key' ? 'default' : 'outline'" size="sm"
+                                    class="flex-1" @click="newMachine.authType = 'key'">密钥</Button>
                             </div>
                         </div>
 
-                        <div v-if="newMachine.auth_type === 'password'" class="space-y-1.5">
+                        <div v-if="newMachine.authType === 'password'" class="space-y-1.5">
                             <label class="text-sm font-medium">密码</label>
                             <Input v-model="newMachine.password" type="password" placeholder="SSH 密码" />
                         </div>
                         <div v-else class="space-y-1.5">
                             <label class="text-sm font-medium">私钥路径</label>
-                            <Input v-model="newMachine.private_key_path" placeholder="~/.ssh/id_rsa" />
+                            <Input v-model="newMachine.privateKeyPath" placeholder="~/.ssh/id_rsa" />
                         </div>
 
                         <div class="space-y-1.5">
@@ -621,19 +594,19 @@ onMounted(() => {
                         <div class="space-y-1.5">
                             <label class="text-sm font-medium">认证方式</label>
                             <div class="flex gap-2">
-                                <Button :variant="editingMachine.auth_type === 'password' ? 'default' : 'outline'"
-                                    size="sm" class="flex-1" @click="editingMachine.auth_type = 'password'">密码</Button>
-                                <Button :variant="editingMachine.auth_type === 'key' ? 'default' : 'outline'" size="sm"
-                                    class="flex-1" @click="editingMachine.auth_type = 'key'">密钥</Button>
+                                <Button :variant="editingMachine.authType === 'password' ? 'default' : 'outline'"
+                                    size="sm" class="flex-1" @click="editingMachine.authType = 'password'">密码</Button>
+                                <Button :variant="editingMachine.authType === 'key' ? 'default' : 'outline'" size="sm"
+                                    class="flex-1" @click="editingMachine.authType = 'key'">密钥</Button>
                             </div>
                         </div>
-                        <div v-if="editingMachine.auth_type === 'password'" class="space-y-1.5">
+                        <div v-if="editingMachine.authType === 'password'" class="space-y-1.5">
                             <label class="text-sm font-medium">密码</label>
                             <Input v-model="editingMachine.password" type="password" placeholder="留空保持不变" />
                         </div>
                         <div v-else class="space-y-1.5">
                             <label class="text-sm font-medium">私钥路径</label>
-                            <Input v-model="editingMachine.private_key_path" />
+                            <Input v-model="editingMachine.privateKeyPath" />
                         </div>
                     </div>
 

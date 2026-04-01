@@ -5,7 +5,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, shallowRef } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import * as monaco from "monaco-editor";
 
@@ -97,10 +97,7 @@ async function loadFile() {
     error.value = null;
 
     try {
-        const base64Content = await invoke<string>("download_file", {
-            sessionId: props.sessionId,
-            remotePath: props.filePath,
-        });
+        const base64Content = await api.downloadFile(props.sessionId!, props.filePath!);
 
         // Base64 解码
         const binaryString = atob(base64Content);
@@ -142,11 +139,7 @@ async function saveFile() {
         }
         const base64Content = btoa(binary);
 
-        await invoke("upload_file", {
-            sessionId: props.sessionId,
-            remotePath: props.filePath,
-            base64Content: base64Content,
-        });
+        await api.uploadFile(props.sessionId!, props.filePath!, base64Content);
 
         originalContent.value = content.value;
     } catch (err: any) {

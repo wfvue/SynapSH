@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 import CpuChart from "./monitor/CpuChart.vue";
 import MemoryChart from "./monitor/MemoryChart.vue";
 import DiskChart, { type DiskInfo } from "./monitor/DiskChart.vue";
@@ -100,7 +100,7 @@ async function refreshData() {
     connectionStatus.value = "connecting";
     
     try {
-        const stats = await invoke<SystemStats>("get_system_stats", { sessionId: props.sessionId });
+        const stats = await api.getSystemStats(props.sessionId);
 
         // 更新 CPU
         cpuHistory.value = [...cpuHistory.value.slice(1), stats.cpuPercent];

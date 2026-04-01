@@ -1,7 +1,7 @@
 <!-- 数据库管理应用 - 宝塔面板风格 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 import { useToast } from "../../components/ui/toast";
 import {
   Dialog,
@@ -134,9 +134,7 @@ async function detectAllDatabases() {
   
   loading.value = true;
   try {
-    const result = await invoke<any[]>("detect_databases", {
-      params: { sessionId: props.sessionId },
-    });
+    const result = await api.detectDatabases(props.sessionId);
     
     // 更新所有数据库的安装状态
     for (const db of result) {
@@ -180,11 +178,9 @@ async function loadDatabases() {
   
   loading.value = true;
   try {
-    const result = await invoke<DatabaseInstance[]>("get_database_schemas", {
-      params: {
-        sessionId: props.sessionId,
-        dbType: activeTab.value,
-      },
+    const result = await api.getDatabases({
+      sessionId: props.sessionId,
+      dbType: activeTab.value,
     });
     databases.value = result;
   } catch (error) {
@@ -213,14 +209,12 @@ async function installEnvironment() {
   installLog.value = "";
   
   try {
-    const result = await invoke<string>("install_database", {
-      params: {
-        sessionId: props.sessionId,
-        dbType: activeTab.value,
-        options: {
-          port: getDefaultPort(activeTab.value),
-          rootPassword: formData.value.rootPassword || generatePassword(),
-        },
+    const result = await api.installDatabase({
+      sessionId: props.sessionId,
+      dbType: activeTab.value,
+      options: {
+        port: getDefaultPort(activeTab.value),
+        rootPassword: formData.value.rootPassword || generatePassword(),
       },
     });
     
@@ -276,17 +270,14 @@ async function createDatabase() {
 
   loading.value = true;
   try {
-    await invoke("create_database_schema", {
-      params: {
-        sessionId: props.sessionId,
-        dbType: activeTab.value,
-        name: formData.value.name,
-        username: formData.value.username || formData.value.name,
-        password: formData.value.password,
-        comment: formData.value.comment,
-        access: formData.value.access,
-        charset: formData.value.charset,
-      },
+    await api.createDatabase({
+      sessionId: props.sessionId,
+      dbType: activeTab.value,
+      name: formData.value.name,
+      username: formData.value.username || formData.value.name,
+      password: formData.value.password,
+      comment: formData.value.comment,
+      charset: formData.value.charset,
     });
 
     toast({ title: "创建成功", description: `数据库 ${formData.value.name} 已创建` });
@@ -304,13 +295,11 @@ async function deleteDatabase(db: DatabaseInstance) {
 
   loading.value = true;
   try {
-    await invoke("delete_database", {
-      params: {
-        sessionId: props.sessionId,
-        dbType: activeTab.value,
-        dbId: db.id,
-        username: db.username,
-      },
+    await api.deleteDatabase({
+      sessionId: props.sessionId,
+      dbType: activeTab.value,
+      dbId: db.id,
+      username: db.username,
     });
 
     toast({ title: "删除成功" });

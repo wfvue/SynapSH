@@ -1,8 +1,7 @@
 <!-- 桌面环境主视图：负责图标、窗口管理与应用调度。 -->
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { api } from "@/lib/api";
 import DesktopWallpaper from "../components/desktop/DesktopWallpaper.vue";
 import DesktopIcons from "../components/desktop/DesktopIcons.vue";
 import type { DesktopIconItem } from "../components/desktop/DesktopIcon.vue";
@@ -76,7 +75,7 @@ const openApps = ref<AppId[]>([]);
 const minimizedApps = ref<AppId[]>([]);
 const focusedApp = ref<AppId | null>(null);
 const desktopIconsRef = ref<InstanceType<typeof DesktopIcons> | null>(null);
-let unlistenProxyError: UnlistenFn | null = null;
+let unlistenProxyError: (() => void) | null = null;
 
 type BrowserProxyError = {
   sessionId: string;
@@ -100,11 +99,7 @@ async function openApp(id: string) {
   if (appId === "browser") {
     try {
       browserError.value = "";
-      await invoke("browser_open", {
-        sessionId: sessionId.value,
-        url: "https://www.google.com",
-        options: { profileMode: "session" },
-      });
+      await api.browserOpen(sessionId.value, "https://www.google.com", { profileMode: "session" });
     } catch (error) {
       const message = formatInvokeError(error);
       browserError.value = message || "打开 Chrome 失败";
@@ -177,9 +172,9 @@ function clearDesktopSelection() {
 
 
 onMounted(async () => {
-  unlistenProxyError = await listen<BrowserProxyError>("browser-proxy-error", (event) => {
-    if (event.payload.sessionId !== sessionId.value) return;
-    browserError.value = `${event.payload.message} (${event.payload.host}:${event.payload.port})`;
+  api.onBrowserProxyError((error) => {
+    if (error.sessionId !== sessionId.value) return;
+    browserError.value = `${error.message} (${error.host}:${error.port})`;
   });
 });
 

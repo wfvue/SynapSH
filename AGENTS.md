@@ -16,10 +16,11 @@ trigger: always_on
 | 终端 | xterm.js + xterm-addon-webgl + xterm-addon-fit |
 | 可视化 | ECharts |
 | 状态管理 | VueUse (主题/持久化) |
-| 后端 | Tauri v2 + tokio |
-| SSH | russh + russh-keys (SOCKS5 Zero-Copy) |
-| 文件传输 | russh-sftp (并发流) |
-| 本地数据库 | sqlx (SQLite) |
+| 桌面框架 | Electron 33 |
+| SSH | ssh2 (Node.js) |
+| 文件传输 | ssh2 SFTP |
+| 本地数据库 | better-sqlite3 |
+| IPC 通信 | Electron contextBridge + ipcRenderer/ipcMain |
 
 ## 代码规范
 
@@ -27,7 +28,6 @@ trigger: always_on
 - 每个源文件顶部必须添加注释，说明该文件的作用
 - Vue 组件：使用 `<!-- 文件说明 -->` 格式
 - TypeScript/JavaScript：使用 `// 文件说明` 或 `/** 文件说明 */` 格式
-- Rust：使用 `//! 文件说明` 或 `/// 文件说明` 格式
 - CSS：使用 `/* 文件说明 */` 格式
 
 ### Vue 组件
@@ -36,18 +36,22 @@ trigger: always_on
 - 使用 `defineEmits` 定义事件
 - 使用 shadcn-vue 组件
 
-
 ### CSS 样式
 - 优先使用 TailwindCSS 工具类
 - 组件级样式使用 `<style scoped>`
 - 图标使用 Iconify：`<span class="iconify mdi--icon-name"></span>`
 
-### Rust 后端
-- Tauri commands 使用 `#[tauri::command]` 宏
+### Electron 后端 (Node.js/TypeScript)
+- 使用 `ipcMain.handle` 注册处理程序
+- 使用 `contextBridge` 安全暴露 API
 - 异步操作使用 `async/await`
-- 错误处理：返回 `Result<T, String>` 给前端
-- **并发控制**：避免全局锁，使用 Cloneable Handle + Channel
-- **网络 IO**：使用 `tokio::io::copy_bidirectional` 实现零拷贝转发
+- 错误处理：使用 `try/catch` 并返回错误信息
+- **会话管理**：使用 Map 存储 SSH 连接和 SFTP 会话
+
+### API 通信
+- 前端通过 `window.electronAPI` 调用后端
+- 事件通过 `ipcRenderer.on` 监听
+- 所有调用都是异步的，返回 Promise
 
 ## 美学 UI 规范
 
@@ -55,7 +59,7 @@ trigger: always_on
 - **Neo-macOS 桌面感**：保留 macOS 的精致秩序感，但强调更明确的信息层级与功能导向
 - **暗色优先 + 亮色兼容**：默认暗色主题，亮色作为可扩展主题，不允许仅在亮色下可读
 - **内容优先，装饰克制**：视觉效果服务于可读性与操作反馈，不做无意义炫技
-- **动效传达状态**：动画只表达“出现/消失/切换/反馈”，禁止无语义运动
+- **动效传达状态**：动画只表达"出现/消失/切换/反馈"，禁止无语义运动
 
 ### 视觉层级（从下到上）
 - `Layer 0` 桌面背景：允许渐变与弱纹理，但对比度必须低，避免干扰窗口内容
@@ -160,25 +164,51 @@ src/
 │   ├── TabBar.vue
 │   ├── ConnectionPanel.vue
 │   └── ui/             # shadcn-vue 组件
+├── lib/                 # 工具库
+│   └── api.ts          # Electron IPC 适配层
 ├── assets/             # 静态资源
 ├── style.css           # 全局样式 + TailwindCSS
-└── main.ts             # 入口文件
+└── main.ts             # 前端入口文件
 
-src-tauri/src/
-├── lib.rs              # Tauri commands
-├── db.rs               # SQLite 数据库操作
-├── ssh.rs              # SSH 会话/SOCKS5 代理/SFTP
-└── main.rs             # 入口
+electron/
+├── main.ts              # Electron 主进程入口
+├── preload.ts           # 预加载脚本 (contextBridge)
+├── services/
+│   ├── ssh.ts          # SSH 会话/SFTP 管理
+│   ├── machine-db.ts    # 本地机器数据库
+│   └── browser.ts       # 浏览器代理管理
+└── tsconfig.json       # TypeScript 配置
 ```
+
+## IPC API 设计
+
+### 主进程处理程序命名规范
+- SSH: `ssh:*` (ssh:connect, ssh:disconnect, ssh:write, ssh:resize)
+- 文件: `fs:*` (fs:list, fs:mkdir, fs:delete, fs:rename)
+- 监控: `monitor:*` (monitor:stats, monitor:kill)
+- 数据库(本地): `db:*` (db:list-machines, db:add-machine)
+- 数据库(远程): `db:*` (db:detect-databases, db:install-database)
+- 浏览器: `browser:*` (browser:open, browser:get-proxy-port)
+- 窗口: `window:*` (window:minimize, window:maximize, window:close)
+
+### 事件命名规范
+- SSH 数据: `ssh:data`
+- 浏览器代理错误: `browser:proxy-error`
 
 ## 运行命令
 
 ```bash
-# 开发
-pnpm tauri dev
+# 安装依赖
+pnpm install
 
-# 构建
-pnpm tauri build
+# 前端开发
+pnpm dev
+
+# Electron 开发
+pnpm electron:dev
+
+# 构建 Electron 应用
+pnpm electron:build
 ```
 
 ## 工作流规则

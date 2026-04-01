@@ -1,15 +1,24 @@
 # SynapSH (光析) - 开发进度
 
+## 技术栈迁移 (2026-04-01)
+- [x] Tauri v2 + Rust 后端迁移到 Electron 33 + Node.js/TypeScript
+- [x] 创建 electron/ 目录结构 (main.ts, preload.ts, services/)
+- [x] 迁移 SSH/SFTP 功能 (ssh2 库替代 russh)
+- [x] 迁移本地数据库 (better-sqlite3 替代 sqlx)
+- [x] 创建 IPC 适配层 (src/lib/api.ts)
+- [x] 更新 AGENTS.md 项目规范
+- [x] 删除 src-tauri/ 和 .cargo/ 目录
+
 ## 当前状态
-- [x] 阶段一：连接与终端 (Connectivity)
+- [/] 阶段一：连接与终端 (Connectivity) - 已完成，需适配 Electron
 - [/] 阶段二：桌面式 OS Shell + 文件管理 (Visual OS)
 - [ ] 阶段三：监控与 AI (Intelligence)
 
 ## 阶段一：连接与终端 ✅
-- [x] Rust SSH 会话管理 + `connect_ssh` / `write_to_pty` / `resize_pty`
+- [x] SSH 会话管理 + connect_ssh / write_to_pty / resize_pty (Electron IPC)
 - [x] 终端渲染（xterm.js + WebGL + fit）
 - [x] 连接面板 UI（账号/密码/密钥）
-- [x] 事件通道 `ssh-data-<sessionId>` 到前端
+- [x] 事件通道 ssh-data-<sessionId> 到前端
 - [x] 机器管理页面（SQLite 持久化 + CRUD + 连接测试）
 
 ## 阶段二：桌面式 OS Shell + 文件管理
@@ -28,13 +37,13 @@
 - [x] OpenSSH 多 sidecar 并行分流（会话级连接池 + 轮询端口分配）
 - [x] 系统设置模块（通用/外观/终端/连接/关于）
 - [x] 顶部 Tab 栏适配原生窗口控件（macOS/Windows）+ 右侧系统外观快捷设置
-- [x] Tab 交互优化：垂直居中、`+` 紧随标签、固定“机器管理”主标签、连接后按机器名建会话标签
+- [x] Tab 交互优化：垂直居中、`+` 紧随标签，固定"机器管理"主标签、连接后按机器名建会话标签
 - [x] 修复 TabBar 外观弹窗配色（按语义化 Token 统一背景/边框/文字/激活态）
-- [x] 升级 russh/russh-sftp 依赖版本
-- [x] 重新定义 `AGENTS.md` 美学 UI 规范（视觉层级 + 语义化 Token + 动效与可访问性约束）
-- [ ] SFTP `read_dir(path)` 后端实现 + JSON 结构
-- [ ] 文件操作：上传 / 下载 / 新建 / 重命名 / 删除
-- [ ] `get_dir_size(path)` 递归统计（用于可视化）
+- [x] 升级 Electron 技术栈
+- [x] 重新定义 AGENTS.md 美学 UI 规范（视觉层级 + 语义化 Token + 动效与可访问性约束）
+- [ ] SFTP read_dir(path) 后端实现 + JSON 结构 (需验证)
+- [ ] 文件操作：上传 / 下载 / 新建 / 重命名 / 删除 (需验证)
+- [ ] get_dir_size(path) 递归统计（用于可视化）
 - [ ] Sunburst 可视化视图
 
 ## 阶段三：监控与 AI
@@ -48,5 +57,5 @@
   - [x] 创建 ProcessDetail 详情抽屉组件
   - [x] 集成进程终止功能到前端界面
   - [x] 优化 CPU 图表，显示核心数和统计信息
-- [ ] Sidecar `llama-server` 启动
+- [ ] Sidecar llama-server 启动
 - [ ] 本地 HTTP 调用链打通

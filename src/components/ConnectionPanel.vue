@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "@/lib/api";
 
 const props = defineProps<{
   isConnected: boolean;
@@ -51,15 +51,12 @@ async function connect() {
       host: host.value,
       port: port.value,
       username: username.value,
-      password: authType.value === "password" ? password.value : null,
-      privateKey: authType.value === "key" ? privateKey.value : null,
+      password: authType.value === "password" ? password.value : undefined,
+      privateKey: authType.value === "key" ? privateKey.value : undefined,
     };
-    console.log("调用 connect_ssh，参数:", params);
+    console.log("调用 connectSSH，参数:", params);
     
-    await invoke("connect_ssh", {
-      sessionId,
-      params,
-    });
+    await api.connectSSH(sessionId, params);
     
     console.log("连接成功！");
     emit("connected", sessionId);

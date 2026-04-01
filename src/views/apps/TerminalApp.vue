@@ -4,8 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { api } from "@/lib/api";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -18,7 +17,7 @@ const props = defineProps<{
 const terminalRef = ref<HTMLElement>();
 const terminal = ref<XTerm | null>(null);
 const fitAddon = ref<FitAddon | null>(null);
-let unlistenFn: UnlistenFn | null = null;
+let unlistenFn: (() => void) | null = null;
 
 // base64 解码为 Uint8Array，正确处理 UTF-8 多字节字符（如中文）
 function base64Decode(base64: string): Uint8Array | null {
@@ -89,31 +88,24 @@ onMounted(async () => {
   // 处理输入
   terminal.value.onData((data) => {
     if (props.sessionId) {
-      invoke("write_to_pty", {
-        sessionId: props.sessionId,
-        data,
-      }).catch(console.error);
+      api.writeToPty(props.sessionId, data).catch(console.error);
     }
   });
 
   // 处理终端大小变化
   terminal.value.onResize(({ cols, rows }) => {
     if (props.sessionId) {
-      invoke("resize_pty", {
-        sessionId: props.sessionId,
-        cols,
-        rows,
-      }).catch(console.error);
+      api.resizePty(props.sessionId, cols, rows).catch(console.error);
     }
   });
 
   // 监听 SSH 数据事件
-  const eventName = `ssh-data-${props.sessionId}`;
-  console.log("Listening for event:", eventName);
+  console.log("Listening for SSH data, sessionId:", props.sessionId);
 
-  unlistenFn = await listen<string>(eventName, (event) => {
-    console.log("Received SSH data, length:", event.payload.length);
-    const decoded = base64Decode(event.payload);
+  unlistenFn = api.onSSHData((sessionId, data) => {
+    if (sessionId !== props.sessionId) return;
+    console.log("Received SSH data, length:", data.length);
+    const decoded = base64Decode(data);
     if (decoded && terminal.value) {
       terminal.value.write(decoded);
     }
@@ -122,10 +114,7 @@ onMounted(async () => {
   // 延迟发送回车，刷新 shell 提示符（shell 欢迎信息可能在监听器启动前发送）
   setTimeout(() => {
     if (props.sessionId && props.sessionId !== "default-session") {
-      invoke("write_to_pty", {
-        sessionId: props.sessionId,
-        data: "\n",
-      }).catch(console.error);
+      api.writeToPty(props.sessionId, "\n").catch(console.error);
     }
   }, 500);
 
@@ -159,11 +148,11 @@ watch(
       terminal.value?.clear();
 
       // 监听新的事件
-      const eventName = `ssh-data-${newId}`;
-      console.log("Switching to new event:", eventName);
-      unlistenFn = await listen<string>(eventName, (event) => {
-        console.log("Received SSH data, length:", event.payload.length);
-        const decoded = base64Decode(event.payload);
+      console.log("Switching to new session:", newId);
+      unlistenFn = api.onSSHData((sessionId, data) => {
+        if (sessionId !== newId) return;
+        console.log("Received SSH data, length:", data.length);
+        const decoded = base64Decode(data);
         if (decoded && terminal.value) {
           terminal.value.write(decoded);
         }
