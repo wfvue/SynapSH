@@ -1,10 +1,10 @@
 // 浏览器代理管理器
 
-import { spawn, ChildProcess } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-import { SSHSessionManager } from './ssh';
+import { spawn, ChildProcess } from "child_process";
+import * as path from "path";
+import * as fs from "fs";
+import * as os from "os";
+import { SSHSessionManager } from "./ssh";
 
 interface BrowserProcess {
   pid: number;
@@ -46,12 +46,12 @@ export class BrowserManager {
   // 预留本地端口
   private async reservePort(): Promise<number> {
     return new Promise((resolve) => {
-      const net = require('net');
+      const net = require("net");
       const server = net.createServer();
 
       server.listen(0, () => {
         const address = server.address();
-        if (address && typeof address === 'object') {
+        if (address && typeof address === "object") {
           resolve(address.port);
         } else {
           resolve(0);
@@ -59,7 +59,7 @@ export class BrowserManager {
         server.close();
       });
 
-      server.on('error', () => {
+      server.on("error", () => {
         resolve(0);
       });
     });
@@ -70,10 +70,10 @@ export class BrowserManager {
     sessionId: string,
     url: string,
     options: BrowserLaunchOptions | undefined,
-    sshManager: SSHSessionManager
+    sshManager: SSHSessionManager,
   ): Promise<void> {
-    const profileMode = options?.profileMode || 'session';
-    const isNewWindow = profileMode === 'new';
+    const profileMode = options?.profileMode || "session";
+    const isNewWindow = profileMode === "new";
 
     // 获取代理端口
     const proxyPort = await this.ensureProxyPort(sessionId, sshManager);
@@ -87,42 +87,42 @@ export class BrowserManager {
 
     // 确定 Chrome 路径
     let chromePath: string;
-    if (process.platform === 'darwin') {
-      chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-    } else if (process.platform === 'win32') {
-      chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+    if (process.platform === "darwin") {
+      chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    } else if (process.platform === "win32") {
+      chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
     } else {
-      chromePath = '/usr/bin/google-chrome';
+      chromePath = "/usr/bin/google-chrome";
     }
 
     // 构建 Chrome 参数
     const chromeArgs = [
       `--proxy-server=socks5://127.0.0.1:${proxyPort}`,
       `--user-data-dir=${profileDir}`,
-      '--disable-quic',
-      '--disable-features=VizDisplayCompositor,OptimizationGuideModelDownloading,OptimizationHintsFetching,AutofillServerCommunication,MediaRouter',
-      '--disable-background-networking',
-      '--disable-default-apps',
-      '--disable-component-update',
-      '--disable-domain-reliability',
-      '--disable-client-side-phishing-detection',
-      '--safebrowsing-disable-auto-update',
-      '--disable-extensions',
-      '--disable-sync',
-      '--disable-translate',
-      '--no-first-run',
-      '--no-default-browser-check',
+      "--disable-quic",
+      "--disable-features=VizDisplayCompositor,OptimizationGuideModelDownloading,OptimizationHintsFetching,AutofillServerCommunication,MediaRouter",
+      "--disable-background-networking",
+      "--disable-default-apps",
+      "--disable-component-update",
+      "--disable-domain-reliability",
+      "--disable-client-side-phishing-detection",
+      "--safebrowsing-disable-auto-update",
+      "--disable-extensions",
+      "--disable-sync",
+      "--disable-translate",
+      "--no-first-run",
+      "--no-default-browser-check",
     ];
 
     if (isNewWindow) {
-      chromeArgs.push('--new-window');
+      chromeArgs.push("--new-window");
     }
 
     chromeArgs.push(url);
 
     // 启动 Chrome
     const child = spawn(chromePath, chromeArgs, {
-      stdio: 'ignore',
+      stdio: "ignore",
       detached: true,
     });
 
@@ -135,7 +135,7 @@ export class BrowserManager {
         child,
       });
 
-      child.on('exit', () => {
+      child.on("exit", () => {
         this.browserProcesses.delete(sessionId);
       });
     }
@@ -145,18 +145,18 @@ export class BrowserManager {
 
   // 获取 Chrome 配置目录
   private getChromeProfileDir(sessionId: string, profileMode: string): string {
-    const baseDir = path.join(os.tmpdir(), 'synapsh-chrome', this.sanitizeSessionId(sessionId));
+    const baseDir = path.join(os.tmpdir(), "synapsh-chrome", this.sanitizeSessionId(sessionId));
 
-    if (profileMode === 'new') {
+    if (profileMode === "new") {
       return path.join(baseDir, `profile-${Date.now()}`);
     }
 
-    return path.join(baseDir, 'profile');
+    return path.join(baseDir, "profile");
   }
 
   // 清理 session ID 用于文件名
   private sanitizeSessionId(sessionId: string): string {
-    return sessionId.replace(/[^a-zA-Z0-9-_]/g, '_');
+    return sessionId.replace(/[^a-zA-Z0-9-_]/g, "_");
   }
 
   // 获取代理端口

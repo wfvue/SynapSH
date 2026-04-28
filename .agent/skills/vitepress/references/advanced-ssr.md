@@ -10,19 +10,20 @@ VitePress pre-renders pages on the server during build. All Vue code must be SSR
 ## The Rule
 
 Only access browser/DOM APIs in Vue lifecycle hooks:
+
 - `onMounted()`
 - `onBeforeMount()`
 
 ```vue
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref } from "vue";
 
-const windowWidth = ref(0)
+const windowWidth = ref(0);
 
 onMounted(() => {
   // Safe - runs only in browser
-  windowWidth.value = window.innerWidth
-})
+  windowWidth.value = window.innerWidth;
+});
 </script>
 ```
 
@@ -31,7 +32,7 @@ onMounted(() => {
 ```vue
 <script setup>
 // WRONG - runs during SSR where window doesn't exist
-const width = window.innerWidth
+const width = window.innerWidth;
 </script>
 ```
 
@@ -55,12 +56,12 @@ Some libraries access `window` or `document` when imported:
 
 ```vue
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted } from "vue";
 
 onMounted(async () => {
-  const lib = await import('browser-only-library')
-  lib.doSomething()
-})
+  const lib = await import("browser-only-library");
+  lib.doSomething();
+});
 </script>
 ```
 
@@ -68,8 +69,8 @@ onMounted(async () => {
 
 ```ts
 if (!import.meta.env.SSR) {
-  const lib = await import('browser-only-library')
-  lib.doSomething()
+  const lib = await import("browser-only-library");
+  lib.doSomething();
 }
 ```
 
@@ -80,11 +81,11 @@ if (!import.meta.env.SSR) {
 export default {
   async enhanceApp({ app }) {
     if (!import.meta.env.SSR) {
-      const plugin = await import('browser-plugin')
-      app.use(plugin.default)
+      const plugin = await import("browser-plugin");
+      app.use(plugin.default);
     }
-  }
-}
+  },
+};
 ```
 
 ## defineClientComponent
@@ -93,11 +94,11 @@ Helper for components that access browser on import:
 
 ```vue
 <script setup>
-import { defineClientComponent } from 'vitepress'
+import { defineClientComponent } from "vitepress";
 
 const BrowserComponent = defineClientComponent(() => {
-  return import('browser-only-component')
-})
+  return import("browser-only-component");
+});
 </script>
 
 <template>
@@ -109,26 +110,26 @@ With props and slots:
 
 ```vue
 <script setup>
-import { ref, h } from 'vue'
-import { defineClientComponent } from 'vitepress'
+import { ref, h } from "vue";
+import { defineClientComponent } from "vitepress";
 
-const componentRef = ref(null)
+const componentRef = ref(null);
 
 const BrowserComponent = defineClientComponent(
-  () => import('browser-only-component'),
+  () => import("browser-only-component"),
   // Props passed to h()
   [
-    { ref: componentRef, someProp: 'value' },
+    { ref: componentRef, someProp: "value" },
     {
-      default: () => 'Default slot content',
-      header: () => h('div', 'Header slot')
-    }
+      default: () => "Default slot content",
+      header: () => h("div", "Header slot"),
+    },
   ],
   // Callback after component loads
   () => {
-    console.log('Component loaded', componentRef.value)
-  }
-)
+    console.log("Component loaded", componentRef.value);
+  },
+);
 </script>
 ```
 
@@ -151,8 +152,8 @@ For other targets, use `postRender` hook:
 export default {
   async postRender(context) {
     // Inject teleport content into final HTML
-  }
-}
+  },
+};
 ```
 
 ## Common SSR Errors
@@ -163,13 +164,13 @@ Code accesses `window` at module level:
 
 ```ts
 // BAD
-const width = window.innerWidth
+const width = window.innerWidth;
 
 // GOOD
-let width: number
+let width: number;
 onMounted(() => {
-  width = window.innerWidth
-})
+  width = window.innerWidth;
+});
 ```
 
 ### "document is not defined"
@@ -178,12 +179,12 @@ Same issue with `document`:
 
 ```ts
 // BAD
-const el = document.querySelector('#app')
+const el = document.querySelector("#app");
 
 // GOOD
 onMounted(() => {
-  const el = document.querySelector('#app')
-})
+  const el = document.querySelector("#app");
+});
 ```
 
 ### Hydration Mismatch
@@ -204,10 +205,10 @@ Server and client render different content:
 
 ```ts
 // In Vue component
-import.meta.env.SSR  // true on server, false on client
+import.meta.env.SSR; // true on server, false on client
 
 // In VitePress
-import { inBrowser } from 'vitepress'
+import { inBrowser } from "vitepress";
 if (inBrowser) {
   // Client-only code
 }

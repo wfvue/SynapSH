@@ -86,7 +86,7 @@ export interface FileListResult {
 export interface FileEntry {
   name: string;
   path: string;
-  type: 'directory' | 'file' | 'symlink' | 'unknown';
+  type: "directory" | "file" | "symlink" | "unknown";
   size: number;
   modifiedTime?: string;
   createdTime?: string;
@@ -275,10 +275,10 @@ export interface BrowserProxyError {
 
 // 获取 API 实例
 function getAPI(): ElectronAPI {
-  if (typeof window !== 'undefined' && window.electronAPI) {
+  if (typeof window !== "undefined" && window.electronAPI) {
     return window.electronAPI;
   }
-  throw new Error('Electron API is not available');
+  throw new Error("Electron API is not available");
 }
 
 // 封装调用
@@ -286,20 +286,15 @@ export const api = {
   // SSH
   connectSSH: (sessionId: string, params: SSHConnectionParams) =>
     getAPI().connectSSH(sessionId, params),
-  disconnectSSH: (sessionId: string) =>
-    getAPI().disconnectSSH(sessionId),
-  writeToPty: (sessionId: string, data: string) =>
-    getAPI().writeToPty(sessionId, data),
+  disconnectSSH: (sessionId: string) => getAPI().disconnectSSH(sessionId),
+  writeToPty: (sessionId: string, data: string) => getAPI().writeToPty(sessionId, data),
   resizePty: (sessionId: string, cols: number, rows: number) =>
     getAPI().resizePty(sessionId, cols, rows),
-  testConnection: (params: TestConnectionParams) =>
-    getAPI().testConnection(params),
+  testConnection: (params: TestConnectionParams) => getAPI().testConnection(params),
 
   // 文件操作
-  listFiles: (sessionId: string, path: string) =>
-    getAPI().listFiles(sessionId, path),
-  createFolder: (sessionId: string, path: string) =>
-    getAPI().createFolder(sessionId, path),
+  listFiles: (sessionId: string, path: string) => getAPI().listFiles(sessionId, path),
+  createFolder: (sessionId: string, path: string) => getAPI().createFolder(sessionId, path),
   deleteFile: (sessionId: string, path: string, isDirectory: boolean) =>
     getAPI().deleteFile(sessionId, path, isDirectory),
   renameFile: (sessionId: string, oldPath: string, newPath: string) =>
@@ -314,49 +309,36 @@ export const api = {
     getAPI().chmodFile(sessionId, path, mode),
 
   // 系统监控
-  getSystemStats: (sessionId: string) =>
-    getAPI().getSystemStats(sessionId),
+  getSystemStats: (sessionId: string) => getAPI().getSystemStats(sessionId),
   killProcess: (sessionId: string, pid: number, signal?: number) =>
     getAPI().killProcess(sessionId, pid, signal),
 
   // 机器管理
   listMachines: () => getAPI().listMachines(),
   addMachine: (input: MachineInput) => getAPI().addMachine(input),
-  updateMachine: (id: string, input: MachineInput) =>
-    getAPI().updateMachine(id, input),
+  updateMachine: (id: string, input: MachineInput) => getAPI().updateMachine(id, input),
   deleteMachine: (id: string) => getAPI().deleteMachine(id),
 
   // 数据库管理
-  detectDatabases: (sessionId: string) =>
-    getAPI().detectDatabases(sessionId),
-  installDatabase: (params: InstallDatabaseParams) =>
-    getAPI().installDatabase(params),
-  manageDatabaseService: (params: ManageServiceParams) =>
-    getAPI().manageDatabaseService(params),
-  getDatabaseConfig: (params: GetDatabaseConfigParams) =>
-    getAPI().getDatabaseConfig(params),
+  detectDatabases: (sessionId: string) => getAPI().detectDatabases(sessionId),
+  installDatabase: (params: InstallDatabaseParams) => getAPI().installDatabase(params),
+  manageDatabaseService: (params: ManageServiceParams) => getAPI().manageDatabaseService(params),
+  getDatabaseConfig: (params: GetDatabaseConfigParams) => getAPI().getDatabaseConfig(params),
   updateDatabaseConfig: (params: UpdateDatabaseConfigParams) =>
     getAPI().updateDatabaseConfig(params),
-  getDatabases: (params: GetDatabasesParams) =>
-    getAPI().getDatabases(params),
-  createDatabase: (params: CreateDatabaseParams) =>
-    getAPI().createDatabase(params),
-  changeDatabasePassword: (params: ChangePasswordParams) =>
-    getAPI().changeDatabasePassword(params),
-  updateDatabase: (params: UpdateDatabaseParams) =>
-    getAPI().updateDatabase(params),
-  deleteDatabase: (params: DeleteDatabaseParams) =>
-    getAPI().deleteDatabase(params),
+  getDatabases: (params: GetDatabasesParams) => getAPI().getDatabases(params),
+  createDatabase: (params: CreateDatabaseParams) => getAPI().createDatabase(params),
+  changeDatabasePassword: (params: ChangePasswordParams) => getAPI().changeDatabasePassword(params),
+  updateDatabase: (params: UpdateDatabaseParams) => getAPI().updateDatabase(params),
+  deleteDatabase: (params: DeleteDatabaseParams) => getAPI().deleteDatabase(params),
 
   // 浏览器代理
   browserOpen: (sessionId: string, url: string, options?: BrowserLaunchOptions) =>
     getAPI().browserOpen(sessionId, url, options),
-  browserGetProxyPort: (sessionId: string) =>
-    getAPI().browserGetProxyPort(sessionId),
+  browserGetProxyPort: (sessionId: string) => getAPI().browserGetProxyPort(sessionId),
 
   // 事件监听
-  onSSHData: (callback: (sessionId: string, data: string) => void) =>
-    getAPI().onSSHData(callback),
+  onSSHData: (callback: (sessionId: string, data: string) => void) => getAPI().onSSHData(callback),
   onBrowserProxyError: (callback: (error: BrowserProxyError) => void) =>
     getAPI().onBrowserProxyError(callback),
 

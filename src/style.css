@@ -45,27 +45,27 @@
   --color-border-subtle: var(--border-subtle);
   --color-strong: var(--border-strong);
   --color-border-strong: var(--border-strong);
-  
+
   /* 文字层级 (增加多重别名以防止编译报错) */
   --color-primary: var(--text-primary);
   --color-text-primary: var(--text-primary);
   --color-primary-text: var(--text-primary);
-  
+
   --color-secondary: var(--text-secondary);
   --color-text-secondary: var(--text-secondary);
   --color-secondary-text: var(--text-secondary);
-  
+
   --color-tertiary: var(--text-tertiary);
   --color-text-tertiary: var(--text-tertiary);
   --color-tertiary-text: var(--text-tertiary);
-  
+
   /* 功能状态颜色 */
   --color-accent: var(--accent-color);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--destructive);
   --color-destructive: var(--destructive);
-  
+
   /* 其他辅助色 */
   --color-brand: var(--brand);
   --color-info: var(--info);

@@ -1,10 +1,13 @@
 // 本地机器数据库管理 - 使用 better-sqlite3
 
-import Database from 'better-sqlite3';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-import { v4 as uuidv4 } from 'uuid';
+import { createRequire } from "node:module";
+import type { Database as BetterSqlite3Database } from "better-sqlite3";
+const _require = createRequire(import.meta.url);
+const Database = _require("better-sqlite3");
+import * as path from "path";
+import * as fs from "fs";
+import * as os from "os";
+import { v4 as uuidv4 } from "uuid";
 
 interface Machine {
   id: string;
@@ -34,29 +37,29 @@ interface MachineInput {
 }
 
 export class MachineDatabase {
-  private db: Database.Database | null = null;
+  private db: BetterSqlite3Database | null = null;
   private dbPath: string;
   private inMemoryMachines: Machine[] = [];
   private useMemory = false;
 
   constructor() {
     const homeDir = os.homedir();
-    const dataDir = path.join(homeDir, '.synapsh');
-    
+    const dataDir = path.join(homeDir, ".synapsh");
+
     // 确保目录存在
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
-    
-    this.dbPath = path.join(dataDir, 'synapsh.db');
+
+    this.dbPath = path.join(dataDir, "synapsh.db");
   }
 
   // 初始化数据库
   async initialize(): Promise<void> {
     try {
       this.db = new Database(this.dbPath);
-      this.db.pragma('journal_mode = WAL');
-      
+      this.db.pragma("journal_mode = WAL");
+
       // 创建表
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS machines (
@@ -72,12 +75,18 @@ export class MachineDatabase {
           os TEXT DEFAULT 'linux',
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
-        )
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
       `);
-      
-      console.log('Machine database initialized');
+
+      console.log("Machine database initialized");
     } catch (error) {
-      console.error('Failed to initialize database, using in-memory fallback:', error);
+      console.error("Failed to initialize database, using in-memory fallback:", error);
       // 使用内存存储作为后备
       this.db = null;
       this.inMemoryMachines = [];
@@ -90,11 +99,11 @@ export class MachineDatabase {
     if (this.useMemory) {
       return this.inMemoryMachines;
     }
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const rows = this.db.prepare('SELECT * FROM machines ORDER BY created_at DESC').all() as any[];
-    
-    return rows.map(row => ({
+    if (!this.db) throw new Error("Database not initialized");
+
+    const rows = this.db.prepare("SELECT * FROM machines ORDER BY created_at DESC").all() as any[];
+
+    return rows.map((row) => ({
       id: row.id,
       name: row.name,
       host: row.host,
@@ -116,9 +125,9 @@ export class MachineDatabase {
     const now = new Date().toISOString();
     const name = input.name || input.host;
     const tags = JSON.stringify(input.tags || []);
-    const os = input.os || 'linux';
+    const os = input.os || "linux";
     const port = input.port || 22;
-    
+
     const machine: Machine = {
       id,
       name,
@@ -133,19 +142,19 @@ export class MachineDatabase {
       createdAt: now,
       updatedAt: now,
     };
-    
+
     if (this.useMemory) {
       this.inMemoryMachines.push(machine);
       return machine;
     }
-    
-    if (!this.db) throw new Error('Database not initialized');
-    
+
+    if (!this.db) throw new Error("Database not initialized");
+
     const stmt = this.db.prepare(`
       INSERT INTO machines (id, name, host, port, username, password, private_key_path, auth_type, tags, os, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     stmt.run(
       id,
       name,
@@ -158,9 +167,9 @@ export class MachineDatabase {
       tags,
       os,
       now,
-      now
+      now,
     );
-    
+
     return machine;
   }
 
@@ -169,13 +178,13 @@ export class MachineDatabase {
     const now = new Date().toISOString();
     const name = input.name || input.host;
     const tags = JSON.stringify(input.tags || []);
-    const os = input.os || 'linux';
+    const os = input.os || "linux";
     const port = input.port || 22;
-    
+
     if (this.useMemory) {
-      const index = this.inMemoryMachines.findIndex(m => m.id === id);
-      if (index === -1) throw new Error('Machine not found');
-      
+      const index = this.inMemoryMachines.findIndex((m) => m.id === id);
+      if (index === -1) throw new Error("Machine not found");
+
       const updated: Machine = {
         id,
         name,
@@ -193,16 +202,16 @@ export class MachineDatabase {
       this.inMemoryMachines[index] = updated;
       return updated;
     }
-    
-    if (!this.db) throw new Error('Database not initialized');
-    
+
+    if (!this.db) throw new Error("Database not initialized");
+
     const stmt = this.db.prepare(`
       UPDATE machines 
       SET name = ?, host = ?, port = ?, username = ?, password = ?, 
           private_key_path = ?, auth_type = ?, tags = ?, os = ?, updated_at = ?
       WHERE id = ?
     `);
-    
+
     stmt.run(
       name,
       input.host,
@@ -214,12 +223,12 @@ export class MachineDatabase {
       tags,
       os,
       now,
-      id
+      id,
     );
-    
+
     // 返回更新后的记录
-    const row = this.db.prepare('SELECT * FROM machines WHERE id = ?').get(id) as any;
-    
+    const row = this.db.prepare("SELECT * FROM machines WHERE id = ?").get(id) as any;
+
     return {
       id: row.id,
       name: row.name,
@@ -239,28 +248,28 @@ export class MachineDatabase {
   // 删除机器
   async deleteMachine(id: string): Promise<void> {
     if (this.useMemory) {
-      this.inMemoryMachines = this.inMemoryMachines.filter(m => m.id !== id);
+      this.inMemoryMachines = this.inMemoryMachines.filter((m) => m.id !== id);
       return;
     }
-    
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('DELETE FROM machines WHERE id = ?');
+
+    if (!this.db) throw new Error("Database not initialized");
+
+    const stmt = this.db.prepare("DELETE FROM machines WHERE id = ?");
     stmt.run(id);
   }
 
   // 获取单个机器
   async getMachine(id: string): Promise<Machine | null> {
     if (this.useMemory) {
-      return this.inMemoryMachines.find(m => m.id === id) || null;
+      return this.inMemoryMachines.find((m) => m.id === id) || null;
     }
-    
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const row = this.db.prepare('SELECT * FROM machines WHERE id = ?').get(id) as any;
-    
+
+    if (!this.db) throw new Error("Database not initialized");
+
+    const row = this.db.prepare("SELECT * FROM machines WHERE id = ?").get(id) as any;
+
     if (!row) return null;
-    
+
     return {
       id: row.id,
       name: row.name,
@@ -275,6 +284,45 @@ export class MachineDatabase {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  // 设置管理
+  async getSetting(key: string, defaultValue: any = null): Promise<any> {
+    if (this.useMemory) {
+      return defaultValue;
+    }
+    if (!this.db) return defaultValue;
+
+    try {
+      const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as any;
+      if (!row) return defaultValue;
+      return JSON.parse(row.value);
+    } catch (e) {
+      console.error(`Failed to get setting ${key}:`, e);
+      return defaultValue;
+    }
+  }
+
+  async setSetting(key: string, value: any): Promise<void> {
+    if (this.useMemory) return;
+    if (!this.db) throw new Error("Database not initialized");
+
+    const now = new Date().toISOString();
+    const valueStr = JSON.stringify(value);
+
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = excluded.updated_at
+      `);
+      stmt.run(key, valueStr, now);
+    } catch (e) {
+      console.error(`Failed to set setting ${key}:`, e);
+      throw e;
+    }
   }
 
   // 关闭数据库

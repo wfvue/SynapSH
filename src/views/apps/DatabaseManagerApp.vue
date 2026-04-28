@@ -51,12 +51,54 @@ const { toast } = useToast();
 
 const activeTab = ref<DatabaseType>("mysql");
 const dbTypes = ref<DbTypeInfo[]>([
-  { type: "mysql", name: "MySQL", icon: "icon-[mdi--database]", color: "#00758f", installed: false, hasRemote: false },
-  { type: "sqlserver", name: "SQLServer", icon: "icon-[mdi--microsoft-windows]", color: "#a91d22", installed: false, hasRemote: false },
-  { type: "mongodb", name: "MongoDB", icon: "icon-[mdi--leaf]", color: "#47a248", installed: false, hasRemote: false },
-  { type: "redis", name: "Redis", icon: "icon-[mdi--database-cog]", color: "#dc382d", installed: false, hasRemote: false },
-  { type: "postgresql", name: "PgSQL", icon: "icon-[mdi--elephant]", color: "#336791", installed: false, hasRemote: false },
-  { type: "sqlite", name: "SQLite", icon: "icon-[mdi--database-outline]", color: "#003b57", installed: false, hasRemote: false },
+  {
+    type: "mysql",
+    name: "MySQL",
+    icon: "icon-[mdi--database]",
+    color: "#00758f",
+    installed: false,
+    hasRemote: false,
+  },
+  {
+    type: "sqlserver",
+    name: "SQLServer",
+    icon: "icon-[mdi--microsoft-windows]",
+    color: "#a91d22",
+    installed: false,
+    hasRemote: false,
+  },
+  {
+    type: "mongodb",
+    name: "MongoDB",
+    icon: "icon-[mdi--leaf]",
+    color: "#47a248",
+    installed: false,
+    hasRemote: false,
+  },
+  {
+    type: "redis",
+    name: "Redis",
+    icon: "icon-[mdi--database-cog]",
+    color: "#dc382d",
+    installed: false,
+    hasRemote: false,
+  },
+  {
+    type: "postgresql",
+    name: "PgSQL",
+    icon: "icon-[mdi--elephant]",
+    color: "#336791",
+    installed: false,
+    hasRemote: false,
+  },
+  {
+    type: "sqlite",
+    name: "SQLite",
+    icon: "icon-[mdi--database-outline]",
+    color: "#003b57",
+    installed: false,
+    hasRemote: false,
+  },
 ]);
 
 const databases = ref<DatabaseInstance[]>([]);
@@ -92,7 +134,7 @@ const charsets = [
 
 // ==================== 计算属性 ====================
 
-const activeDbType = computed(() => dbTypes.value.find(d => d.type === activeTab.value)!);
+const activeDbType = computed(() => dbTypes.value.find((d) => d.type === activeTab.value)!);
 
 const installStatus = computed((): InstallStatus => {
   if (activeDbType.value.installed) return "installed";
@@ -103,9 +145,8 @@ const installStatus = computed((): InstallStatus => {
 const filteredDatabases = computed(() => {
   if (!searchQuery.value) return databases.value;
   const query = searchQuery.value.toLowerCase();
-  return databases.value.filter(d => 
-    d.name.toLowerCase().includes(query) || 
-    d.comment.toLowerCase().includes(query)
+  return databases.value.filter(
+    (d) => d.name.toLowerCase().includes(query) || d.comment.toLowerCase().includes(query),
   );
 });
 
@@ -131,23 +172,23 @@ const hasDetectedAll = ref(false);
 
 async function detectAllDatabases() {
   if (hasDetectedAll.value) return;
-  
+
   loading.value = true;
   try {
     const result = await api.detectDatabases(props.sessionId);
-    
+
     // 更新所有数据库的安装状态
     for (const db of result) {
       const type = db.dbType as DatabaseType;
-      const typeInfo = dbTypes.value.find(t => t.type === type);
+      const typeInfo = dbTypes.value.find((t) => t.type === type);
       if (typeInfo) {
         typeInfo.installed = db.installed;
         globalInstallStatus.value[type] = db.installed;
       }
     }
-    
+
     hasDetectedAll.value = true;
-    
+
     // 加载当前选中的数据库列表
     if (activeDbType.value.installed) {
       await loadDatabases();
@@ -175,7 +216,7 @@ async function redetectCurrentDb() {
 
 async function loadDatabases() {
   if (!activeDbType.value.installed) return;
-  
+
   loading.value = true;
   try {
     const result = await api.getDatabases({
@@ -197,7 +238,7 @@ function switchTab(type: DatabaseType) {
   currentPage.value = 1;
   searchQuery.value = "";
   databases.value = [];
-  
+
   // 如果已检测过，直接加载数据库列表
   if (hasDetectedAll.value && activeDbType.value.installed) {
     loadDatabases();
@@ -207,7 +248,7 @@ function switchTab(type: DatabaseType) {
 async function installEnvironment() {
   installLoading.value = true;
   installLog.value = "";
-  
+
   try {
     const result = await api.installDatabase({
       sessionId: props.sessionId,
@@ -217,10 +258,10 @@ async function installEnvironment() {
         rootPassword: formData.value.rootPassword || generatePassword(),
       },
     });
-    
+
     installLog.value = result;
     toast({ title: "安装成功", description: `${activeDbType.value.name} 环境安装完成` });
-    
+
     activeDbType.value.installed = true;
     showInstallModal.value = false;
     await loadDatabases();
@@ -355,10 +396,7 @@ onMounted(() => {
         >
           <span :class="db.icon"></span>
           <span>{{ db.name }}</span>
-          <span
-            v-if="db.installed"
-            class="ml-1.5 w-1.5 h-1.5 rounded-full bg-green-500"
-          ></span>
+          <span v-if="db.installed" class="ml-1.5 w-1.5 h-1.5 rounded-full bg-green-500"></span>
         </div>
       </div>
     </div>
@@ -366,15 +404,21 @@ onMounted(() => {
     <!-- 加载中状态 -->
     <div v-if="loading" class="flex-1 flex items-center justify-center">
       <div class="text-center">
-        <span class="icon-[mdi--loading] text-4xl text-neutral-300 dark:text-neutral-600 animate-spin block mb-4"></span>
-        <p class="text-neutral-500 dark:text-neutral-400">正在检测 {{ activeDbType.name }} 安装状态...</p>
+        <span
+          class="icon-[mdi--loading] text-4xl text-neutral-300 dark:text-neutral-600 animate-spin block mb-4"
+        ></span>
+        <p class="text-neutral-500 dark:text-neutral-400">
+          正在检测 {{ activeDbType.name }} 安装状态...
+        </p>
       </div>
     </div>
 
     <!-- 未安装提示 -->
     <template v-else-if="installStatus === 'notInstalled'">
       <div class="flex-1 flex items-center justify-center p-8">
-        <div class="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-white/10 p-8 max-w-lg w-full text-center">
+        <div
+          class="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-white/10 p-8 max-w-lg w-full text-center"
+        >
           <div
             class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-white text-2xl"
             :style="{ backgroundColor: activeDbType.color }"
@@ -396,7 +440,10 @@ onMounted(() => {
               <span class="icon-[mdi--refresh]"></span>
               读取本地 {{ activeDbType.name }}
             </Button>
-            <Button class="gap-2 bg-green-500 hover:bg-green-600 text-white" @click="openInstallModal">
+            <Button
+              class="gap-2 bg-green-500 hover:bg-green-600 text-white"
+              @click="openInstallModal"
+            >
               <span class="icon-[mdi--download]"></span>
               安装 {{ activeDbType.name }}
             </Button>
@@ -408,12 +455,14 @@ onMounted(() => {
     <!-- 已安装 - 显示数据库列表 -->
     <template v-else-if="installStatus === 'installed'">
       <!-- 工具栏 -->
-      <div class="bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-white/10 p-4">
+      <div
+        class="bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-white/10 p-4"
+      >
         <div class="flex items-center justify-between flex-wrap gap-4">
           <div class="flex items-center gap-2">
-            <Button 
+            <Button
               v-if="activeTab !== 'redis' && activeTab !== 'sqlite'"
-              class="gap-2 bg-green-500 hover:bg-green-600 text-white" 
+              class="gap-2 bg-green-500 hover:bg-green-600 text-white"
               @click="openAddModal"
             >
               <span class="icon-[mdi--plus]"></span>
@@ -438,7 +487,10 @@ onMounted(() => {
           </div>
 
           <div class="flex items-center gap-2">
-            <select v-model="pageSize" class="h-9 px-3 rounded-md border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700 text-sm">
+            <select
+              v-model="pageSize"
+              class="h-9 px-3 rounded-md border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700 text-sm"
+            >
               <option :value="10">10条/页</option>
               <option :value="20">20条/页</option>
               <option :value="50">50条/页</option>
@@ -450,7 +502,9 @@ onMounted(() => {
                 placeholder="请输入数据库名称/备注"
                 class="h-9 w-64 pl-3 pr-9 rounded-md border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:text-neutral-200"
               />
-              <span class="icon-[mdi--magnify] absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400"></span>
+              <span
+                class="icon-[mdi--magnify] absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400"
+              ></span>
             </div>
           </div>
         </div>
@@ -458,26 +512,52 @@ onMounted(() => {
 
       <!-- 数据库列表 -->
       <div class="flex-1 overflow-auto p-4">
-        <div class="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-white/10 overflow-hidden">
+        <div
+          class="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-white/10 overflow-hidden"
+        >
           <table class="w-full">
             <thead class="bg-neutral-50 dark:bg-neutral-700/50">
               <tr>
                 <th class="w-10 px-4 py-3">
                   <input type="checkbox" class="rounded border-neutral-300" />
                 </th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
                   数据库名
                   <span class="icon-[mdi--sort] text-neutral-400 cursor-pointer ml-1"></span>
                 </th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
                   用户名
                   <span class="icon-[mdi--sort] text-neutral-400 cursor-pointer ml-1"></span>
                 </th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">密码</th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">备份</th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">数据库位置</th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">备注</th>
-                <th class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300">操作</th>
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
+                  密码
+                </th>
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
+                  备份
+                </th>
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
+                  数据库位置
+                </th>
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
+                  备注
+                </th>
+                <th
+                  class="px-4 py-3 text-left text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                >
+                  操作
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-neutral-100 dark:divide-white/5">
@@ -489,15 +569,24 @@ onMounted(() => {
                 <td class="px-4 py-3">
                   <input type="checkbox" class="rounded border-neutral-300" />
                 </td>
-                <td class="px-4 py-3 text-sm font-medium text-neutral-700 dark:text-neutral-200">{{ db.name }}</td>
-                <td class="px-4 py-3 text-sm text-neutral-700 dark:text-neutral-200">{{ db.username }}</td>
+                <td class="px-4 py-3 text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                  {{ db.name }}
+                </td>
+                <td class="px-4 py-3 text-sm text-neutral-700 dark:text-neutral-200">
+                  {{ db.username }}
+                </td>
                 <td class="px-4 py-3 text-sm">
                   <div class="flex items-center gap-2">
                     <span class="text-neutral-500">**********</span>
-                    <button class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
+                    <button
+                      class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+                    >
                       <span class="icon-[mdi--eye]"></span>
                     </button>
-                    <button class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" @click="copyPassword">
+                    <button
+                      class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+                      @click="copyPassword"
+                    >
                       <span class="icon-[mdi--content-copy]"></span>
                     </button>
                   </div>
@@ -509,13 +598,22 @@ onMounted(() => {
                     <button class="text-green-500 hover:text-green-600 text-xs">导入</button>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-400">{{ db.location }}</td>
-                <td class="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-400">{{ db.comment }}</td>
+                <td class="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-400">
+                  {{ db.location }}
+                </td>
+                <td class="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-400">
+                  {{ db.comment }}
+                </td>
                 <td class="px-4 py-3 text-sm">
                   <div class="flex items-center gap-2">
                     <button class="text-green-500 hover:text-green-600 text-xs">权限</button>
                     <button class="text-green-500 hover:text-green-600 text-xs">改密</button>
-                    <button class="text-red-500 hover:text-red-600 text-xs" @click="deleteDatabase(db)">删除</button>
+                    <button
+                      class="text-red-500 hover:text-red-600 text-xs"
+                      @click="deleteDatabase(db)"
+                    >
+                      删除
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -524,26 +622,40 @@ onMounted(() => {
 
           <!-- 空状态 -->
           <div v-if="paginatedDatabases.length === 0" class="py-16 text-center">
-            <span class="icon-[mdi--database-off] text-4xl text-neutral-300 dark:text-neutral-600"></span>
-            <p class="mt-2 text-neutral-500 dark:text-neutral-400">暂无数据库，点击"添加数据库"创建</p>
+            <span
+              class="icon-[mdi--database-off] text-4xl text-neutral-300 dark:text-neutral-600"
+            ></span>
+            <p class="mt-2 text-neutral-500 dark:text-neutral-400">
+              暂无数据库，点击"添加数据库"创建
+            </p>
           </div>
         </div>
       </div>
 
       <!-- 分页 -->
-      <div class="bg-white dark:bg-neutral-800 border-t border-neutral-200 dark:border-white/10 p-4">
+      <div
+        class="bg-white dark:bg-neutral-800 border-t border-neutral-200 dark:border-white/10 p-4"
+      >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <select class="h-8 px-2 rounded border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700 text-sm">
+            <select
+              class="h-8 px-2 rounded border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700 text-sm"
+            >
               <option>请选择批量操作</option>
               <option>批量删除</option>
             </select>
-            <Button variant="outline" size="sm" class="bg-green-500 hover:bg-green-600 text-white border-none">
+            <Button
+              variant="outline"
+              size="sm"
+              class="bg-green-500 hover:bg-green-600 text-white border-none"
+            >
               批量操作
             </Button>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-sm text-neutral-500 dark:text-neutral-400">共 {{ filteredDatabases.length }} 条</span>
+            <span class="text-sm text-neutral-500 dark:text-neutral-400"
+              >共 {{ filteredDatabases.length }} 条</span
+            >
             <div class="flex items-center gap-1">
               <button
                 class="w-8 h-8 flex items-center justify-center rounded border border-neutral-300 dark:border-white/10 hover:bg-neutral-100 dark:hover:bg-white/5 disabled:opacity-50"
@@ -552,7 +664,10 @@ onMounted(() => {
               >
                 <span class="icon-[mdi--chevron-left] text-sm"></span>
               </button>
-              <span class="w-8 h-8 flex items-center justify-center rounded bg-green-500 text-white text-sm">{{ currentPage }}</span>
+              <span
+                class="w-8 h-8 flex items-center justify-center rounded bg-green-500 text-white text-sm"
+                >{{ currentPage }}</span
+              >
               <button
                 class="w-8 h-8 flex items-center justify-center rounded border border-neutral-300 dark:border-white/10 hover:bg-neutral-100 dark:hover:bg-white/5 disabled:opacity-50"
                 :disabled="currentPage >= totalPages"
@@ -590,19 +705,30 @@ onMounted(() => {
             <label class="text-sm font-medium">管理员密码</label>
             <div class="flex gap-2">
               <Input v-model="formData.rootPassword" type="text" />
-              <Button variant="outline" size="icon" @click="formData.rootPassword = generatePassword()">
+              <Button
+                variant="outline"
+                size="icon"
+                @click="formData.rootPassword = generatePassword()"
+              >
                 <span class="icon-[mdi--dice-5]"></span>
               </Button>
             </div>
           </div>
-          <div v-if="installLog" class="bg-neutral-100 dark:bg-neutral-900 rounded p-3 max-h-40 overflow-auto">
+          <div
+            v-if="installLog"
+            class="bg-neutral-100 dark:bg-neutral-900 rounded p-3 max-h-40 overflow-auto"
+          >
             <pre class="text-xs whitespace-pre-wrap">{{ installLog }}</pre>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" @click="showInstallModal = false">取消</Button>
-          <Button class="bg-green-500 hover:bg-green-600 text-white" :disabled="installLoading" @click="installEnvironment">
-            {{ installLoading ? '安装中...' : '开始安装' }}
+          <Button
+            class="bg-green-500 hover:bg-green-600 text-white"
+            :disabled="installLoading"
+            @click="installEnvironment"
+          >
+            {{ installLoading ? "安装中..." : "开始安装" }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -638,8 +764,13 @@ onMounted(() => {
           </div>
           <div v-if="activeTab === 'mysql'" class="space-y-2">
             <label class="text-sm font-medium">字符集</label>
-            <select v-model="formData.charset" class="w-full h-10 px-3 rounded-md border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700">
-              <option v-for="cs in charsets" :key="cs.value" :value="cs.value">{{ cs.label }}</option>
+            <select
+              v-model="formData.charset"
+              class="w-full h-10 px-3 rounded-md border border-neutral-300 dark:border-white/10 bg-white dark:bg-neutral-700"
+            >
+              <option v-for="cs in charsets" :key="cs.value" :value="cs.value">
+                {{ cs.label }}
+              </option>
             </select>
           </div>
           <div class="space-y-2">
@@ -649,8 +780,12 @@ onMounted(() => {
         </div>
         <DialogFooter>
           <Button variant="outline" @click="showAddModal = false">取消</Button>
-          <Button class="bg-green-500 hover:bg-green-600 text-white" :disabled="loading" @click="createDatabase">
-            {{ loading ? '创建中...' : '提交' }}
+          <Button
+            class="bg-green-500 hover:bg-green-600 text-white"
+            :disabled="loading"
+            @click="createDatabase"
+          >
+            {{ loading ? "创建中..." : "提交" }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -726,8 +861,12 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {

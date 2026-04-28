@@ -15,7 +15,15 @@ import SettingsApp from "./apps/SettingsApp.vue";
 import TerminalApp from "./apps/TerminalApp.vue";
 import DatabaseManagerApp from "./apps/DatabaseManagerApp.vue";
 
-type AppId = "terminal" | "files" | "monitor" | "settings" | "app-center" | "browser" | "editor" | "database";
+type AppId =
+  | "terminal"
+  | "files"
+  | "monitor"
+  | "settings"
+  | "app-center"
+  | "browser"
+  | "editor"
+  | "database";
 
 const props = defineProps<{
   initialSession?: string;
@@ -29,26 +37,113 @@ const sessionId = computed(() => {
 
 // 桌面图标配置 - macOS 风格图标
 const desktopItems: DesktopIconItem[] = [
-  { id: "computer", label: "此电脑", icon: "icon-[mdi--laptop]", color: "linear-gradient(135deg, #5e6ad2 0%, #3b82f6 100%)", app: "files" },
-  { id: "terminal", label: "终端", icon: "icon-[mdi--console]", color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)", app: "terminal" },
-  { id: "files", label: "访达", icon: "icon-[mdi--folder]", color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)", app: "files" },
-  { id: "database", label: "数据库", icon: "icon-[mdi--database]", color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)", app: "database" },
-  { id: "web", label: "浏览器", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
-  { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)", app: "settings" },
-  { id: "tasks", label: "活动监视器", icon: "icon-[mdi--chart-line]", color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)", app: "monitor" },
-  { id: "apps", label: "应用中心", icon: "icon-[mdi--apps]", color: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)", app: "app-center" },
-  { id: "trash", label: "废纸篓", icon: "icon-[mdi--delete]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)" },
+  {
+    id: "computer",
+    label: "此电脑",
+    icon: "icon-[mdi--laptop]",
+    color: "linear-gradient(135deg, #5e6ad2 0%, #3b82f6 100%)",
+    app: "files",
+  },
+  {
+    id: "terminal",
+    label: "终端",
+    icon: "icon-[mdi--console]",
+    color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)",
+    app: "terminal",
+  },
+  {
+    id: "files",
+    label: "访达",
+    icon: "icon-[mdi--folder]",
+    color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)",
+    app: "files",
+  },
+  {
+    id: "database",
+    label: "数据库",
+    icon: "icon-[mdi--database]",
+    color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)",
+    app: "database",
+  },
+  {
+    id: "web",
+    label: "浏览器",
+    icon: "icon-[mdi--compass]",
+    color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)",
+    app: "browser",
+  },
+  {
+    id: "settings",
+    label: "系统设置",
+    icon: "icon-[mdi--cog]",
+    color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
+    app: "settings",
+  },
+  {
+    id: "tasks",
+    label: "活动监视器",
+    icon: "icon-[mdi--chart-line]",
+    color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)",
+    app: "monitor",
+  },
+  {
+    id: "apps",
+    label: "应用中心",
+    icon: "icon-[mdi--apps]",
+    color: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)",
+    app: "app-center",
+  },
+  {
+    id: "trash",
+    label: "废纸篓",
+    icon: "icon-[mdi--delete]",
+    color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
+  },
 ];
-
 
 // Dock 栏配置
 const dockItems: DockItem[] = [
-  { id: "files", label: "访达", icon: "icon-[mdi--folder]", color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)", app: "files" },
-  { id: "terminal", label: "终端", icon: "icon-[mdi--console]", color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)", app: "terminal" },
-  { id: "browser", label: "浏览器", icon: "icon-[mdi--compass]", color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)", app: "browser" },
-  { id: "monitor", label: "活动监视器", icon: "icon-[mdi--chart-line]", color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)", app: "monitor" },
-  { id: "settings", label: "系统设置", icon: "icon-[mdi--cog]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)", app: "settings" },
-  { id: "trash", label: "废纸篓", icon: "icon-[mdi--delete]", color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)" },
+  {
+    id: "files",
+    label: "访达",
+    icon: "icon-[mdi--folder]",
+    color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)",
+    app: "files",
+  },
+  {
+    id: "terminal",
+    label: "终端",
+    icon: "icon-[mdi--console]",
+    color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)",
+    app: "terminal",
+  },
+  {
+    id: "browser",
+    label: "浏览器",
+    icon: "icon-[mdi--compass]",
+    color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)",
+    app: "browser",
+  },
+  {
+    id: "monitor",
+    label: "活动监视器",
+    icon: "icon-[mdi--chart-line]",
+    color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)",
+    app: "monitor",
+  },
+  {
+    id: "settings",
+    label: "系统设置",
+    icon: "icon-[mdi--cog]",
+    color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
+    app: "settings",
+  },
+  {
+    id: "trash",
+    label: "废纸篓",
+    icon: "icon-[mdi--delete]",
+    color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
+  },
 ];
 
 // 应用标题
@@ -170,7 +265,6 @@ function clearDesktopSelection() {
   desktopIconsRef.value?.clearSelection();
 }
 
-
 onMounted(async () => {
   api.onBrowserProxyError((error) => {
     if (error.sessionId !== sessionId.value) return;
@@ -188,7 +282,6 @@ onUnmounted(() => {
 
 <template>
   <div class="desktop" @click.self="clearDesktopSelection">
-
     <div v-if="browserError" class="browser-error">
       <span class="icon-[mdi--alert-circle]"></span>
       <span class="browser-error-text">{{ browserError }}</span>
@@ -201,9 +294,20 @@ onUnmounted(() => {
     <DesktopIcons ref="desktopIconsRef" :items="desktopItems" @open-app="openApp" />
 
     <!-- 窗口层 -->
-    <AppWindow v-for="app in openApps" :key="app" :app-id="app" :title="appTitles[app]" :active="focusedApp === app"
-      :offset="getWindowOffset(app)" :z-index="getWindowZIndex(app)" :minimized="minimizedApps.includes(app)"
-      @close="closeApp(app)" @minimize="minimizeApp(app)" @focus="focusApp(app)" v-slot="windowProps">
+    <AppWindow
+      v-for="app in openApps"
+      :key="app"
+      :app-id="app"
+      :title="appTitles[app]"
+      :active="focusedApp === app"
+      :offset="getWindowOffset(app)"
+      :z-index="getWindowZIndex(app)"
+      :minimized="minimizedApps.includes(app)"
+      @close="closeApp(app)"
+      @minimize="minimizeApp(app)"
+      @focus="focusApp(app)"
+      v-slot="windowProps"
+    >
       <!-- 终端应用 -->
       <TerminalApp v-if="app === 'terminal'" :session-id="sessionId" />
 
@@ -214,12 +318,22 @@ onUnmounted(() => {
       <ActivityMonitor v-else-if="app === 'monitor'" :session-id="sessionId" />
 
       <!-- 文本编辑器 -->
-      <TextEditorApp v-else-if="app === 'editor' && editorFile" :session-id="sessionId" :file-path="editorFile.path"
-        :file-name="editorFile.name" />
+      <TextEditorApp
+        v-else-if="app === 'editor' && editorFile"
+        :session-id="sessionId"
+        :file-path="editorFile.path"
+        :file-name="editorFile.name"
+      />
 
       <!-- 系统设置 -->
-      <SettingsApp v-else-if="app === 'settings'" :session-id="sessionId" :close="() => closeApp(app)"
-        :minimize="() => minimizeApp(app)" :maximize="() => focusApp(app)" :start-drag="() => { }" />
+      <SettingsApp
+        v-else-if="app === 'settings'"
+        :session-id="sessionId"
+        :close="() => closeApp(app)"
+        :minimize="() => minimizeApp(app)"
+        :maximize="() => focusApp(app)"
+        :start-drag="() => {}"
+      />
 
       <!-- 数据库管理 -->
       <DatabaseManagerApp v-else-if="app === 'database'" :session-id="sessionId" />

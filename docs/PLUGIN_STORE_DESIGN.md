@@ -71,60 +71,60 @@ my-plugin/
 ```typescript
 interface PluginManifest {
   // 基础信息
-  id: string;                    // 唯一标识符 (反向域名格式: com.example.plugin)
-  name: string;                  // 显示名称
-  version: string;               // 语义化版本 (遵循 semver)
-  description: string;           // 简短描述
-  author: string;                // 作者信息
-  
+  id: string; // 唯一标识符 (反向域名格式: com.example.plugin)
+  name: string; // 显示名称
+  version: string; // 语义化版本 (遵循 semver)
+  description: string; // 简短描述
+  author: string; // 作者信息
+
   // 分类与标签
-  category: PluginCategory;      // 插件分类
-  tags: string[];                // 标签用于搜索
-  
+  category: PluginCategory; // 插件分类
+  tags: string[]; // 标签用于搜索
+
   // 入口配置
-  entry: string;                 // 入口文件路径 (相对路径)
-  icon: string;                  // 图标路径
-  
+  entry: string; // 入口文件路径 (相对路径)
+  icon: string; // 图标路径
+
   // 权限声明
-  permissions: Permission[];     // 所需权限列表
-  
+  permissions: Permission[]; // 所需权限列表
+
   // 兼容性
-  minAppVersion: string;         // 最低 SynapSH 版本要求
+  minAppVersion: string; // 最低 SynapSH 版本要求
   supportedPlatforms: Platform[]; // 支持的平台
-  
+
   // 商店信息
-  screenshots: string[];         // 截图路径
-  pricing: PricingInfo;          // 定价信息
-  
+  screenshots: string[]; // 截图路径
+  pricing: PricingInfo; // 定价信息
+
   // 本地化
   i18n: Record<string, I18nInfo>; // 多语言支持
 }
 
-type PluginCategory = 
-  | 'terminal'      // 终端扩展
-  | 'file-manager'  // 文件管理
-  | 'monitoring'    // 系统监控
-  | 'productivity'  // 生产力工具
-  | 'development'   // 开发工具
-  | 'database'      // 数据库工具
-  | 'network'       // 网络工具
-  | 'security'      // 安全工具
-  | 'theme'         // 主题美化
-  | 'utility';      // 其他工具
+type PluginCategory =
+  | "terminal" // 终端扩展
+  | "file-manager" // 文件管理
+  | "monitoring" // 系统监控
+  | "productivity" // 生产力工具
+  | "development" // 开发工具
+  | "database" // 数据库工具
+  | "network" // 网络工具
+  | "security" // 安全工具
+  | "theme" // 主题美化
+  | "utility"; // 其他工具
 
 type Permission =
-  | 'ssh:read'      // 读取 SSH 会话信息
-  | 'ssh:write'     // 执行 SSH 命令
-  | 'sftp:read'     // 读取远程文件
-  | 'sftp:write'    // 写入远程文件
-  | 'fs:temp'       // 访问临时文件系统
-  | 'fs:appdata'    // 访问应用数据目录
-  | 'network:http'  // HTTP 请求
-  | 'network:ws'    // WebSocket
-  | 'ui:dock'       // 添加到 Dock
-  | 'ui:menubar'    // 添加到菜单栏
-  | 'ui:statusbar'  // 添加到状态栏
-  | 'system:notification'; // 发送系统通知
+  | "ssh:read" // 读取 SSH 会话信息
+  | "ssh:write" // 执行 SSH 命令
+  | "sftp:read" // 读取远程文件
+  | "sftp:write" // 写入远程文件
+  | "fs:temp" // 访问临时文件系统
+  | "fs:appdata" // 访问应用数据目录
+  | "network:http" // HTTP 请求
+  | "network:ws" // WebSocket
+  | "ui:dock" // 添加到 Dock
+  | "ui:menubar" // 添加到菜单栏
+  | "ui:statusbar" // 添加到状态栏
+  | "system:notification"; // 发送系统通知
 ```
 
 ### 3. JavaScript API 规范
@@ -135,25 +135,25 @@ declare namespace synapsh {
   // 版本信息
   const version: string;
   const apiVersion: string;
-  
+
   // 上下文信息
   const pluginId: string;
   const pluginVersion: string;
-  
+
   // SSH 相关 API
   namespace ssh {
     function getActiveSessions(): Promise<SessionInfo[]>;
     function executeCommand(sessionId: string, command: string): Promise<string>;
     function onData(sessionId: string, callback: (data: string) => void): Unsubscriber;
   }
-  
+
   // 文件传输 API
   namespace sftp {
     function readFile(sessionId: string, path: string): Promise<Uint8Array>;
     function writeFile(sessionId: string, path: string, data: Uint8Array): Promise<void>;
     function listDirectory(sessionId: string, path: string): Promise<FileEntry[]>;
   }
-  
+
   // UI 集成 API
   namespace ui {
     function showNotification(options: NotificationOptions): void;
@@ -161,26 +161,26 @@ declare namespace synapsh {
     function registerDockItem(item: DockItemConfig): void;
     function setBadge(count: number): void;
   }
-  
+
   // 存储 API
   namespace storage {
     function get<T>(key: string): Promise<T | undefined>;
     function set<T>(key: string, value: T): Promise<void>;
     function remove(key: string): Promise<void>;
   }
-  
+
   // 网络 API
   namespace network {
     function fetch(url: string, options?: RequestInit): Promise<Response>;
     function createWebSocket(url: string): WebSocket;
   }
-  
+
   // 事件系统
   namespace events {
     function on(event: string, callback: (...args: any[]) => void): Unsubscriber;
     function emit(event: string, ...args: any[]): void;
   }
-  
+
   // 日志系统
   namespace logger {
     function debug(...args: any[]): void;
@@ -225,7 +225,7 @@ interface PermissionGrant {
   permission: string;
   granted: boolean;
   scope?: PermissionScope;
-  expiresAt?: number;  // 可选的过期时间
+  expiresAt?: number; // 可选的过期时间
 }
 
 // 权限范围限制
@@ -243,15 +243,11 @@ interface PermissionScope {
 // 权限申请流程
 class PermissionManager {
   // 申请权限 (会触发用户确认对话框)
-  async requestPermission(
-    pluginId: string, 
-    permission: string,
-    reason?: string
-  ): Promise<boolean>;
-  
+  async requestPermission(pluginId: string, permission: string, reason?: string): Promise<boolean>;
+
   // 检查权限
   async checkPermission(pluginId: string, permission: string): Promise<boolean>;
-  
+
   // 撤销权限
   async revokePermission(pluginId: string, permission: string): Promise<void>;
 }
@@ -262,7 +258,7 @@ class PermissionManager {
 ```typescript
 // 插件包签名验证
 interface PluginSignature {
-  algorithm: 'ed25519' | 'rsa-pss';
+  algorithm: "ed25519" | "rsa-pss";
   publicKey: string;
   signature: string;
   timestamp: number;
@@ -348,13 +344,13 @@ const DEFAULT_LIMITS: ResourceLimits = {
 interface SecurityRule {
   id: string;
   name: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
+  severity: "critical" | "high" | "medium" | "low";
   description: string;
-  
+
   // 静态分析规则
-  pattern?: RegExp;           // 正则匹配危险代码
+  pattern?: RegExp; // 正则匹配危险代码
   forbiddenImports?: string[]; // 禁止的模块
-  
+
   // 行为分析规则
   sandboxTest?: (context: SandboxContext) => Promise<boolean>;
 }
@@ -362,26 +358,26 @@ interface SecurityRule {
 // 关键检测规则
 const CRITICAL_RULES: SecurityRule[] = [
   {
-    id: 'NO_EVAL',
-    name: '禁止使用 eval',
-    severity: 'critical',
+    id: "NO_EVAL",
+    name: "禁止使用 eval",
+    severity: "critical",
     pattern: /\beval\s*\(/,
   },
   {
-    id: 'NO_DYNAMIC_IMPORT',
-    name: '禁止动态导入',
-    severity: 'high',
+    id: "NO_DYNAMIC_IMPORT",
+    name: "禁止动态导入",
+    severity: "high",
     pattern: /import\s*\(/,
   },
   {
-    id: 'NO_CHILD_PROCESS',
-    name: '禁止子进程',
-    forbiddenImports: ['child_process', 'node:child_process'],
+    id: "NO_CHILD_PROCESS",
+    name: "禁止子进程",
+    forbiddenImports: ["child_process", "node:child_process"],
   },
   {
-    id: 'NO_FILE_SYSTEM',
-    name: '禁止直接文件系统访问',
-    forbiddenImports: ['fs', 'node:fs', 'fs/promises'],
+    id: "NO_FILE_SYSTEM",
+    name: "禁止直接文件系统访问",
+    forbiddenImports: ["fs", "node:fs", "fs/promises"],
   },
 ];
 ```
@@ -389,7 +385,7 @@ const CRITICAL_RULES: SecurityRule[] = [
 ### 4. 审核状态流转
 
 ```
-DRAFT -> SUBMITTED -> PENDING_REVIEW -> 
+DRAFT -> SUBMITTED -> PENDING_REVIEW ->
   ├─> APPROVED -> PUBLISHED
   ├─> REJECTED -> (修改后) -> SUBMITTED
   └─> SUSPENDED (发布后发现问题)
@@ -404,17 +400,17 @@ DRAFT -> SUBMITTED -> PENDING_REVIEW ->
 ```typescript
 // 遵循 semver: MAJOR.MINOR.PATCH
 interface VersionInfo {
-  version: string;           // 当前版本
-  minAppVersion: string;     // 最低 SynapSH 版本
+  version: string; // 当前版本
+  minAppVersion: string; // 最低 SynapSH 版本
   changelog: ChangelogEntry[];
   downloadUrl: string;
-  checksum: string;          // SHA-256 校验
-  size: number;              // 包大小 (bytes)
-  releasedAt: string;        // ISO 8601 日期
+  checksum: string; // SHA-256 校验
+  size: number; // 包大小 (bytes)
+  releasedAt: string; // ISO 8601 日期
 }
 
 interface ChangelogEntry {
-  type: 'feature' | 'fix' | 'security' | 'breaking';
+  type: "feature" | "fix" | "security" | "breaking";
   description: string;
   issueId?: string;
 }
@@ -427,11 +423,11 @@ interface UpdatePolicy {
   // 自动更新设置
   autoUpdate: boolean;
   // 更新频道
-  channel: 'stable' | 'beta' | 'alpha';
+  channel: "stable" | "beta" | "alpha";
   // 更新时间窗口
   updateWindow?: {
-    start: string;  // "02:00"
-    end: string;    // "06:00"
+    start: string; // "02:00"
+    end: string; // "06:00"
   };
   // 延迟更新 (小时)
   delayHours?: number;
@@ -442,7 +438,7 @@ class UpdateManager {
   async checkForUpdates(pluginId: string): Promise<UpdateInfo | null>;
   async downloadUpdate(pluginId: string, version: string): Promise<void>;
   async installUpdate(pluginId: string): Promise<void>;
-  async rollback(pluginId: string): Promise<void>;  // 回滚到上一版本
+  async rollback(pluginId: string): Promise<void>; // 回滚到上一版本
 }
 ```
 
@@ -453,7 +449,7 @@ class UpdateManager {
 interface HotUpdateConfig {
   enabled: boolean;
   // 支持的更新类型
-  supportedTypes: ('assets' | 'styles' | 'config')[];
+  supportedTypes: ("assets" | "styles" | "config")[];
   // 最大热更新包大小
   maxSize: number;
 }
@@ -475,17 +471,17 @@ async function applyHotUpdate(pluginId: string, update: HotUpdate) {
 ```typescript
 interface CompatibilityMatrix {
   appVersion: string;
-  pluginVersions: Record<string, string>;  // pluginId -> max supported version
+  pluginVersions: Record<string, string>; // pluginId -> max supported version
 }
 
 // 示例
 const COMPATIBILITY: CompatibilityMatrix[] = [
   {
-    appVersion: '2.0.0',
+    appVersion: "2.0.0",
     pluginVersions: {
-      'com.example.terminal-theme': '1.5.x',
-      'com.example.ssh-toolkit': '2.x',
-    }
+      "com.example.terminal-theme": "1.5.x",
+      "com.example.ssh-toolkit": "2.x",
+    },
   },
 ];
 ```
@@ -501,23 +497,23 @@ interface Review {
   id: string;
   pluginId: string;
   userId: string;
-  
+
   // 评分 (1-5 星)
   rating: number;
-  
+
   // 评价内容
   title?: string;
   content?: string;
-  
+
   // 版本信息
   pluginVersion: string;
   appVersion: string;
-  
+
   // 元数据
   createdAt: string;
   updatedAt: string;
-  helpfulCount: number;      // 认为有帮助的用户数
-  
+  helpfulCount: number; // 认为有帮助的用户数
+
   // 开发者回复
   developerReply?: {
     content: string;
@@ -527,9 +523,10 @@ interface Review {
 
 // 评分统计
 interface RatingStats {
-  average: number;           // 平均分
-  totalCount: number;        // 总评价数
-  distribution: {            // 分布
+  average: number; // 平均分
+  totalCount: number; // 总评价数
+  distribution: {
+    // 分布
     5: number;
     4: number;
     3: number;
@@ -563,15 +560,15 @@ interface FraudDetectionRule {
 // 示例规则
 const FRAUD_RULES: FraudDetectionRule[] = [
   {
-    id: 'RATING_SPIKE',
-    name: '评分激增检测',
+    id: "RATING_SPIKE",
+    name: "评分激增检测",
     detect: (reviews) => {
       // 检测短时间内大量 5 星评价
     },
   },
   {
-    id: 'SAME_CONTENT',
-    name: '重复内容检测',
+    id: "SAME_CONTENT",
+    name: "重复内容检测",
     detect: (reviews) => {
       // 检测内容相似度
     },
@@ -585,12 +582,12 @@ const FRAUD_RULES: FraudDetectionRule[] = [
 interface Feedback {
   id: string;
   pluginId: string;
-  type: 'bug' | 'feature' | 'performance' | 'security';
-  
+  type: "bug" | "feature" | "performance" | "security";
+
   // 基本信息
   title: string;
   description: string;
-  
+
   // 环境信息 (自动收集)
   environment: {
     appVersion: string;
@@ -598,14 +595,14 @@ interface Feedback {
     os: string;
     osVersion: string;
   };
-  
+
   // 状态流转
-  status: 'open' | 'investigating' | 'resolved' | 'closed';
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  
+  status: "open" | "investigating" | "resolved" | "closed";
+  priority?: "low" | "medium" | "high" | "critical";
+
   // 关联
-  assignee?: string;         // 分配的开发者
-  relatedIssues?: string[];  // 关联问题
+  assignee?: string; // 分配的开发者
+  relatedIssues?: string[]; // 关联问题
 }
 
 // 崩溃报告
@@ -631,35 +628,35 @@ interface CrashReport {
 ### 1. 商业模式
 
 ```typescript
-type PricingModel = 
-  | { type: 'free' }
-  | { type: 'paid'; price: number; currency: string }
-  | { type: 'subscription'; monthlyPrice: number; yearlyPrice?: number }
-  | { type: 'freemium'; freeFeatures: string[]; proPrice: number };
+type PricingModel =
+  | { type: "free" }
+  | { type: "paid"; price: number; currency: string }
+  | { type: "subscription"; monthlyPrice: number; yearlyPrice?: number }
+  | { type: "freemium"; freeFeatures: string[]; proPrice: number };
 
 // 交易记录
 interface Transaction {
   id: string;
-  type: 'purchase' | 'refund' | 'subscription_start' | 'subscription_renew' | 'subscription_cancel';
+  type: "purchase" | "refund" | "subscription_start" | "subscription_renew" | "subscription_cancel";
   pluginId: string;
   userId: string;
   amount: number;
   currency: string;
-  platformFee: number;       // 平台抽成
-  developerRevenue: number;  // 开发者收入
+  platformFee: number; // 平台抽成
+  developerRevenue: number; // 开发者收入
   timestamp: string;
 }
 ```
 
 ### 2. 分成比例
 
-| 类型 | 平台抽成 | 开发者收入 | 说明 |
-|------|---------|-----------|------|
-| 免费插件 | 0% | 0% | 完全免费 |
-| 付费插件 | 20% | 80% | 一次性购买 |
-| 订阅制 | 15% | 85% | 首年 |
-| 订阅制(续费) | 10% | 90% | 续费奖励 |
-| 捐赠模式 | 5% | 95% | 用户自愿捐赠 |
+| 类型         | 平台抽成 | 开发者收入 | 说明         |
+| ------------ | -------- | ---------- | ------------ |
+| 免费插件     | 0%       | 0%         | 完全免费     |
+| 付费插件     | 20%      | 80%        | 一次性购买   |
+| 订阅制       | 15%      | 85%        | 首年         |
+| 订阅制(续费) | 10%      | 90%        | 续费奖励     |
+| 捐赠模式     | 5%       | 95%        | 用户自愿捐赠 |
 
 ### 3. 结算系统
 
@@ -676,20 +673,20 @@ interface Payout {
     net: number;
   };
   revenue: {
-    gross: number;     // 总收入
+    gross: number; // 总收入
     platformFee: number;
-    tax: number;       // 预扣税
-    net: number;       // 净收入
+    tax: number; // 预扣税
+    net: number; // 净收入
   };
-  status: 'pending' | 'processing' | 'completed';
-  payoutMethod: 'bank_transfer' | 'paypal' | 'crypto';
+  status: "pending" | "processing" | "completed";
+  payoutMethod: "bank_transfer" | "paypal" | "crypto";
 }
 
 // 结算周期
 const PAYOUT_SCHEDULE = {
-  minimumAmount: 100,  // 最低结算金额 (USD)
-  frequency: 'monthly', // 结算频率
-  delayDays: 30,       // 账期 (退款窗口)
+  minimumAmount: 100, // 最低结算金额 (USD)
+  frequency: "monthly", // 结算频率
+  delayDays: 30, // 账期 (退款窗口)
 };
 ```
 
@@ -795,13 +792,13 @@ pub struct PluginManager {
 // src/composables/usePlugins.ts
 export function usePlugins() {
   const installedPlugins = ref<InstalledPlugin[]>([]);
-  
+
   async function installPlugin(pluginId: string): Promise<void>;
   async function uninstallPlugin(pluginId: string): Promise<void>;
   async function enablePlugin(pluginId: string): Promise<void>;
   async function disablePlugin(pluginId: string): Promise<void>;
   async function updatePlugin(pluginId: string): Promise<void>;
-  
+
   return {
     installedPlugins,
     installPlugin,
@@ -856,13 +853,13 @@ synapsh logs
 declare namespace synapsh.dev {
   // 模拟 API 响应
   function mock(apiName: string, response: any): void;
-  
+
   // 查看权限状态
   function getPermissionState(): PermissionState;
-  
+
   // 性能分析
   function profile(): PerformanceProfile;
-  
+
   // 热重载
   function enableHotReload(): void;
 }

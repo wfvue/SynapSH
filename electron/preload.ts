@@ -1,6 +1,6 @@
 // Preload script - 暴露安全的 IPC 桥接到渲染进程
 
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from "electron";
 
 // 定义 API 类型
 export interface ElectronAPI {
@@ -10,7 +10,7 @@ export interface ElectronAPI {
   writeToPty: (sessionId: string, data: string) => Promise<void>;
   resizePty: (sessionId: string, cols: number, rows: number) => Promise<void>;
   testConnection: (params: TestConnectionParams) => Promise<boolean>;
-  
+
   // 文件操作
   listFiles: (sessionId: string, path: string) => Promise<FileListResult>;
   createFolder: (sessionId: string, path: string) => Promise<void>;
@@ -20,17 +20,19 @@ export interface ElectronAPI {
   uploadFile: (sessionId: string, remotePath: string, content: string) => Promise<void>;
   createFile: (sessionId: string, path: string, content?: string) => Promise<void>;
   chmodFile: (sessionId: string, path: string, mode: number) => Promise<void>;
-  
+
   // 系统监控
   getSystemStats: (sessionId: string) => Promise<SystemStats>;
   killProcess: (sessionId: string, pid: number, signal?: number) => Promise<void>;
-  
+
   // 机器管理
   listMachines: () => Promise<Machine[]>;
   addMachine: (input: MachineInput) => Promise<Machine>;
   updateMachine: (id: string, input: MachineInput) => Promise<Machine>;
   deleteMachine: (id: string) => Promise<void>;
-  
+  getSetting: (key: string, defaultValue?: any) => Promise<any>;
+  setSetting: (key: string, value: any) => Promise<void>;
+
   // 数据库管理
   detectDatabases: (sessionId: string) => Promise<DatabaseDetectionResult[]>;
   installDatabase: (params: InstallDatabaseParams) => Promise<string>;
@@ -42,15 +44,15 @@ export interface ElectronAPI {
   changeDatabasePassword: (params: ChangePasswordParams) => Promise<void>;
   updateDatabase: (params: UpdateDatabaseParams) => Promise<void>;
   deleteDatabase: (params: DeleteDatabaseParams) => Promise<void>;
-  
+
   // 浏览器代理
   browserOpen: (sessionId: string, url: string, options?: BrowserLaunchOptions) => Promise<void>;
   browserGetProxyPort: (sessionId: string) => Promise<number | null>;
-  
+
   // 事件监听
   onSSHData: (callback: (sessionId: string, data: string) => void) => void;
   onBrowserProxyError: (callback: (error: BrowserProxyError) => void) => void;
-  
+
   // 窗口控制
   minimizeWindow: () => void;
   maximizeWindow: () => void;
@@ -82,7 +84,7 @@ interface FileListResult {
 interface FileEntry {
   name: string;
   path: string;
-  type: 'directory' | 'file' | 'symlink' | 'unknown';
+  type: "directory" | "file" | "symlink" | "unknown";
   size: number;
   modifiedTime?: string;
   createdTime?: string;
@@ -272,67 +274,75 @@ interface BrowserProxyError {
 // 暴露 API 到渲染进程
 const electronAPI: ElectronAPI = {
   // SSH 相关
-  connectSSH: (sessionId, params) => ipcRenderer.invoke('ssh:connect', sessionId, params),
-  disconnectSSH: (sessionId) => ipcRenderer.invoke('ssh:disconnect', sessionId),
-  writeToPty: (sessionId, data) => ipcRenderer.invoke('ssh:write', sessionId, data),
-  resizePty: (sessionId, cols, rows) => ipcRenderer.invoke('ssh:resize', sessionId, cols, rows),
-  testConnection: (params) => ipcRenderer.invoke('ssh:test', params),
-  
+  connectSSH: (sessionId, params) => ipcRenderer.invoke("ssh:connect", sessionId, params),
+  disconnectSSH: (sessionId) => ipcRenderer.invoke("ssh:disconnect", sessionId),
+  writeToPty: (sessionId, data) => ipcRenderer.invoke("ssh:write", sessionId, data),
+  resizePty: (sessionId, cols, rows) => ipcRenderer.invoke("ssh:resize", sessionId, cols, rows),
+  testConnection: (params) => ipcRenderer.invoke("ssh:test", params),
+
   // 文件操作
-  listFiles: (sessionId, path) => ipcRenderer.invoke('fs:list', sessionId, path),
-  createFolder: (sessionId, path) => ipcRenderer.invoke('fs:mkdir', sessionId, path),
-  deleteFile: (sessionId, path, isDirectory) => ipcRenderer.invoke('fs:delete', sessionId, path, isDirectory),
-  renameFile: (sessionId, oldPath, newPath) => ipcRenderer.invoke('fs:rename', sessionId, oldPath, newPath),
-  downloadFile: (sessionId, remotePath) => ipcRenderer.invoke('fs:download', sessionId, remotePath),
-  uploadFile: (sessionId, remotePath, content) => ipcRenderer.invoke('fs:upload', sessionId, remotePath, content),
-  createFile: (sessionId, path, content) => ipcRenderer.invoke('fs:create', sessionId, path, content),
-  chmodFile: (sessionId, path, mode) => ipcRenderer.invoke('fs:chmod', sessionId, path, mode),
-  
+  listFiles: (sessionId, path) => ipcRenderer.invoke("fs:list", sessionId, path),
+  createFolder: (sessionId, path) => ipcRenderer.invoke("fs:mkdir", sessionId, path),
+  deleteFile: (sessionId, path, isDirectory) =>
+    ipcRenderer.invoke("fs:delete", sessionId, path, isDirectory),
+  renameFile: (sessionId, oldPath, newPath) =>
+    ipcRenderer.invoke("fs:rename", sessionId, oldPath, newPath),
+  downloadFile: (sessionId, remotePath) => ipcRenderer.invoke("fs:download", sessionId, remotePath),
+  uploadFile: (sessionId, remotePath, content) =>
+    ipcRenderer.invoke("fs:upload", sessionId, remotePath, content),
+  createFile: (sessionId, path, content) =>
+    ipcRenderer.invoke("fs:create", sessionId, path, content),
+  chmodFile: (sessionId, path, mode) => ipcRenderer.invoke("fs:chmod", sessionId, path, mode),
+
   // 系统监控
-  getSystemStats: (sessionId) => ipcRenderer.invoke('monitor:stats', sessionId),
-  killProcess: (sessionId, pid, signal) => ipcRenderer.invoke('monitor:kill', sessionId, pid, signal),
-  
+  getSystemStats: (sessionId) => ipcRenderer.invoke("monitor:stats", sessionId),
+  killProcess: (sessionId, pid, signal) =>
+    ipcRenderer.invoke("monitor:kill", sessionId, pid, signal),
+
   // 机器管理
-  listMachines: () => ipcRenderer.invoke('db:list-machines'),
-  addMachine: (input) => ipcRenderer.invoke('db:add-machine', input),
-  updateMachine: (id, input) => ipcRenderer.invoke('db:update-machine', id, input),
-  deleteMachine: (id) => ipcRenderer.invoke('db:delete-machine', id),
-  
+  listMachines: () => ipcRenderer.invoke("db:list-machines"),
+  addMachine: (input) => ipcRenderer.invoke("db:add-machine", input),
+  updateMachine: (id, input) => ipcRenderer.invoke("db:update-machine", id, input),
+  deleteMachine: (id) => ipcRenderer.invoke("db:delete-machine", id),
+  getSetting: (key, defaultValue) => ipcRenderer.invoke("db:get-setting", key, defaultValue),
+  setSetting: (key, value) => ipcRenderer.invoke("db:set-setting", key, value),
+
   // 数据库管理
-  detectDatabases: (sessionId) => ipcRenderer.invoke('db:detect-databases', sessionId),
-  installDatabase: (params) => ipcRenderer.invoke('db:install-database', params),
-  manageDatabaseService: (params) => ipcRenderer.invoke('db:manage-service', params),
-  getDatabaseConfig: (params) => ipcRenderer.invoke('db:get-config', params),
-  updateDatabaseConfig: (params) => ipcRenderer.invoke('db:update-config', params),
-  getDatabases: (params) => ipcRenderer.invoke('db:get-databases', params),
-  createDatabase: (params) => ipcRenderer.invoke('db:create-database', params),
-  changeDatabasePassword: (params) => ipcRenderer.invoke('db:change-password', params),
-  updateDatabase: (params) => ipcRenderer.invoke('db:update-database', params),
-  deleteDatabase: (params) => ipcRenderer.invoke('db:delete-database', params),
-  
+  detectDatabases: (sessionId) => ipcRenderer.invoke("db:detect-databases", sessionId),
+  installDatabase: (params) => ipcRenderer.invoke("db:install-database", params),
+  manageDatabaseService: (params) => ipcRenderer.invoke("db:manage-service", params),
+  getDatabaseConfig: (params) => ipcRenderer.invoke("db:get-config", params),
+  updateDatabaseConfig: (params) => ipcRenderer.invoke("db:update-config", params),
+  getDatabases: (params) => ipcRenderer.invoke("db:get-databases", params),
+  createDatabase: (params) => ipcRenderer.invoke("db:create-database", params),
+  changeDatabasePassword: (params) => ipcRenderer.invoke("db:change-password", params),
+  updateDatabase: (params) => ipcRenderer.invoke("db:update-database", params),
+  deleteDatabase: (params) => ipcRenderer.invoke("db:delete-database", params),
+
   // 浏览器代理
-  browserOpen: (sessionId, url, options) => ipcRenderer.invoke('browser:open', sessionId, url, options),
-  browserGetProxyPort: (sessionId) => ipcRenderer.invoke('browser:get-proxy-port', sessionId),
-  
+  browserOpen: (sessionId, url, options) =>
+    ipcRenderer.invoke("browser:open", sessionId, url, options),
+  browserGetProxyPort: (sessionId) => ipcRenderer.invoke("browser:get-proxy-port", sessionId),
+
   // 事件监听
   onSSHData: (callback) => {
     const handler = (_event: any, sessionId: string, data: string) => callback(sessionId, data);
-    ipcRenderer.on('ssh:data', handler);
-    return () => ipcRenderer.removeListener('ssh:data', handler);
+    ipcRenderer.on("ssh:data", handler);
+    return () => ipcRenderer.removeListener("ssh:data", handler);
   },
   onBrowserProxyError: (callback) => {
     const handler = (_event: any, error: BrowserProxyError) => callback(error);
-    ipcRenderer.on('browser:proxy-error', handler);
-    return () => ipcRenderer.removeListener('browser:proxy-error', handler);
+    ipcRenderer.on("browser:proxy-error", handler);
+    return () => ipcRenderer.removeListener("browser:proxy-error", handler);
   },
-  
+
   // 窗口控制
-  minimizeWindow: () => ipcRenderer.send('window:minimize'),
-  maximizeWindow: () => ipcRenderer.send('window:maximize'),
-  closeWindow: () => ipcRenderer.send('window:close'),
+  minimizeWindow: () => ipcRenderer.send("window:minimize"),
+  maximizeWindow: () => ipcRenderer.send("window:maximize"),
+  closeWindow: () => ipcRenderer.send("window:close"),
 };
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+contextBridge.exposeInMainWorld("electronAPI", electronAPI);
 
 // 添加类型声明到全局
 declare global {

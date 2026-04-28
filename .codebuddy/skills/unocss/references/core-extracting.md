@@ -23,11 +23,11 @@ export default defineConfig({
     pipeline: {
       include: [
         /\.(vue|svelte|[jt]sx|mdx?|astro|html)($|\?)/,
-        'src/**/*.{js,ts}', // Add js/ts
+        "src/**/*.{js,ts}", // Add js/ts
       ],
     },
   },
-})
+});
 ```
 
 ### Filesystem Extraction
@@ -37,12 +37,9 @@ For files not in build pipeline:
 ```ts
 export default defineConfig({
   content: {
-    filesystem: [
-      'src/**/*.php',
-      'public/*.html',
-    ],
+    filesystem: ["src/**/*.php", "public/*.html"],
   },
-})
+});
 ```
 
 ### Inline Text Extraction
@@ -52,10 +49,10 @@ export default defineConfig({
   content: {
     inline: [
       '<div class="p-4 text-red">Some text</div>',
-      async () => (await fetch('https://example.com')).text(),
+      async () => (await fetch("https://example.com")).text(),
     ],
   },
-})
+});
 ```
 
 ## Magic Comments
@@ -67,8 +64,8 @@ Force scan a file:
 ```ts
 // @unocss-include
 export const classes = {
-  active: 'bg-primary text-white',
-}
+  active: "bg-primary text-white",
+};
 ```
 
 ### @unocss-ignore
@@ -104,16 +101,16 @@ UnoCSS works at **build time** - dynamic classes don't work:
 **1. Safelist** - Pre-generate known values:
 
 ```ts
-safelist: ['p-1', 'p-2', 'p-3', 'p-4']
+safelist: ["p-1", "p-2", "p-3", "p-4"];
 ```
 
 **2. Static mapping** - List combinations statically:
 
 ```ts
 const colors = {
-  red: 'text-red border-red',
-  blue: 'text-blue border-blue',
-}
+  red: "text-red border-red",
+  blue: "text-blue border-blue",
+};
 ```
 
 **3. Runtime** - Use `@unocss/runtime` for true runtime generation.
@@ -123,15 +120,15 @@ const colors = {
 ```ts
 extractors: [
   {
-    name: 'my-extractor',
+    name: "my-extractor",
     extract({ code }) {
-      return code.match(/class:[\w-]+/g) || []
+      return code.match(/class:[\w-]+/g) || [];
     },
   },
-]
+];
 ```
 
-<!-- 
+<!--
 Source references:
 - https://unocss.dev/guide/extracting
 -->

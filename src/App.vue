@@ -30,7 +30,7 @@ watch(
   (color) => {
     document.documentElement.style.setProperty("--accent-color", color);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 interface ConnectPayload {
@@ -97,7 +97,7 @@ function handleCloseTab(id: string) {
 
 function handleConnect(payload: ConnectPayload) {
   const existingTab = tabs.value.find(
-    (tab) => tab.kind === "session" && tab.machineId === payload.machineId
+    (tab) => tab.kind === "session" && tab.machineId === payload.machineId,
   );
 
   if (existingTab) {
@@ -144,10 +144,23 @@ function resetToSafeState() {
   <div class="app-container">
     <div v-if="globalError" class="global-error-overlay">
       <h2 class="text-xl font-bold mb-4">应用崩溃</h2>
-      <pre class="bg-black/50 p-4 rounded mb-4 overflow-auto max-h-[60vh] text-left whitespace-pre-wrap">{{ globalError }}</pre>
+      <pre
+        class="bg-black/50 p-4 rounded mb-4 overflow-auto max-h-[60vh] text-left whitespace-pre-wrap"
+        >{{ globalError }}</pre
+      >
       <div class="flex gap-4">
-        <button class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-white" @click="resetToSafeState">返回首页</button>
-        <button class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700 text-white" @click="reloadApp">重新加载</button>
+        <button
+          class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-white"
+          @click="resetToSafeState"
+        >
+          返回首页
+        </button>
+        <button
+          class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700 text-white"
+          @click="reloadApp"
+        >
+          重新加载
+        </button>
       </div>
     </div>
 
@@ -186,7 +199,9 @@ function resetToSafeState() {
 
 <style>
 body {
-  font-family: "Avenir Next", "Avenir", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  font-family:
+    "Avenir Next", "Avenir", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC",
+    "Source Han Sans SC", sans-serif;
   background-color: var(--background);
   color: var(--foreground);
   overflow: hidden;

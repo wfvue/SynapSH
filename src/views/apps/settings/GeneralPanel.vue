@@ -3,7 +3,7 @@
   设置启动行为、默认应用等通用配置
 -->
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { Switch } from "@/components/ui/switch";
 
 // 通用设置项
@@ -12,81 +12,126 @@ const showWelcome = ref(true);
 const language = ref("zh-CN");
 const defaultShell = ref("bash");
 
+// 从数据库加载设置
+onMounted(async () => {
+  autoConnect.value = await window.electronAPI.getSetting("general:autoConnect", true);
+  showWelcome.value = await window.electronAPI.getSetting("general:showWelcome", true);
+  language.value = await window.electronAPI.getSetting("general:language", "zh-CN");
+  defaultShell.value = await window.electronAPI.getSetting("general:defaultShell", "bash");
+});
+
+// 监听变动并保存
+watch(autoConnect, (val) => window.electronAPI.setSetting("general:autoConnect", val));
+watch(showWelcome, (val) => window.electronAPI.setSetting("general:showWelcome", val));
+watch(language, (val) => window.electronAPI.setSetting("general:language", val));
+watch(defaultShell, (val) => window.electronAPI.setSetting("general:defaultShell", val));
+
 const languages = [
-    { value: "zh-CN", label: "简体中文" },
-    { value: "en-US", label: "English" },
+  { value: "zh-CN", label: "简体中文" },
+  { value: "en-US", label: "English" },
 ];
 
 const shells = [
-    { value: "bash", label: "Bash" },
-    { value: "zsh", label: "Zsh" },
-    { value: "sh", label: "Sh" },
+  { value: "bash", label: "Bash" },
+  { value: "zsh", label: "Zsh" },
+  { value: "sh", label: "Sh" },
 ];
 </script>
 
 <template>
-    <div class="p-8 max-w-5xl mx-auto text-foreground animate-in fade-in duration-500">
-        <div class="mb-8">
-            <h2 class="text-3xl font-bold tracking-tight mb-2">通用</h2>
-            <p class="text-muted-foreground">配置基本行为和偏好设置</p>
+  <div class="space-y-7 animate-in fade-in duration-300 pb-8">
+    <!-- 启动部分 -->
+    <section>
+      <div class="px-2 mb-2">
+        <span class="text-[12px] font-semibold text-tertiary">启动行为</span>
+      </div>
+
+      <div
+        class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl overflow-hidden divide-y divide-black/5 dark:divide-white/5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
+      >
+        <div
+          class="flex items-center justify-between p-3.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+        >
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[13px] font-medium text-primary">启动时自动连接</span>
+            <span class="text-[11px] text-tertiary">同步应用开启后自动恢复上次的 SSH 会话</span>
+          </div>
+          <Switch v-model:checked="autoConnect" />
         </div>
 
-        <section class="mb-10">
-            <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">启动</h3>
+        <div
+          class="flex items-center justify-between p-3.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+        >
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[13px] font-medium text-primary">显示欢迎界面</span>
+            <span class="text-[11px] text-tertiary">启动时展示快速上手指南</span>
+          </div>
+          <Switch v-model:checked="showWelcome" />
+        </div>
+      </div>
+    </section>
 
-            <div class="bg-secondary/20 border border-border rounded-xl overflow-hidden">
-                <div
-                    class="flex items-center justify-between p-4 border-b border-border hover:bg-foreground/5 transition-colors">
-                    <div class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">启动时自动连接</span>
-                        <span class="text-xs text-muted-foreground">启动应用后自动连接上次使用的服务器</span>
-                    </div>
-                    <Switch v-model:checked="autoConnect" />
-                </div>
+    <!-- 语言部分 -->
+    <section>
+      <div class="px-2 mb-2">
+        <span class="text-[12px] font-semibold text-tertiary">语言与区域</span>
+      </div>
+      <div
+        class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-3.5 px-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+      >
+        <span class="text-[13px] font-medium text-primary">界面语言</span>
+        <div class="relative group">
+          <select
+            v-model="language"
+            class="appearance-none bg-black/5 dark:bg-white/10 border-0 rounded-[6px] pl-3 pr-8 py-1 text-[12px] outline-none text-primary min-w-[120px] transition-all cursor-pointer"
+          >
+            <option
+              v-for="lang in languages"
+              :key="lang.value"
+              :value="lang.value"
+              class="bg-background text-primary"
+            >
+              {{ lang.label }}
+            </option>
+          </select>
+          <span
+            class="icon-[lucide--chevron-down] absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-tertiary pointer-events-none"
+          ></span>
+        </div>
+      </div>
+    </section>
 
-                <div class="flex items-center justify-between p-4 hover:bg-foreground/5 transition-colors">
-                    <div class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">显示欢迎界面</span>
-                        <span class="text-xs text-muted-foreground">启动时显示欢迎和快速入门指南</span>
-                    </div>
-                    <Switch v-model:checked="showWelcome" />
-                </div>
-            </div>
-        </section>
-
-        <section class="mb-10">
-            <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">语言和区域</h3>
-
-            <div
-                class="bg-secondary/20 border border-border rounded-xl overflow-hidden p-4 flex items-center justify-between hover:bg-foreground/5 transition-colors">
-                <span class="text-sm font-medium">界面语言</span>
-                <select v-model="language"
-                    class="bg-background border border-border rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-foreground min-w-[140px]">
-                    <option v-for="lang in languages" :key="lang.value" :value="lang.value"
-                        class="bg-gray-900 text-white">
-                        {{ lang.label }}
-                    </option>
-                </select>
-            </div>
-        </section>
-
-        <section class="mb-10">
-            <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">默认设置</h3>
-
-            <div
-                class="bg-secondary/20 border border-border rounded-xl overflow-hidden p-4 flex items-center justify-between hover:bg-foreground/5 transition-colors">
-                <div class="flex flex-col gap-1">
-                    <span class="text-sm font-medium">默认 Shell</span>
-                    <span class="text-xs text-muted-foreground">新终端会话使用的默认 Shell</span>
-                </div>
-                <select v-model="defaultShell"
-                    class="bg-background border border-border rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-foreground min-w-[140px]">
-                    <option v-for="shell in shells" :key="shell.value" :value="shell.value"
-                        class="bg-gray-900 text-white">
-                        {{ shell.label }}
-                    </option>
-                </select>
-            </div>
-        </section>
-    </div>
+    <!-- 默认设置部分 -->
+    <section>
+      <div class="px-2 mb-2">
+        <span class="text-[12px] font-semibold text-tertiary">终端默认设置</span>
+      </div>
+      <div
+        class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-3.5 px-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+      >
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[13px] font-medium text-primary">默认 Shell</span>
+          <span class="text-[11px] text-tertiary">创建新终端连接时默认使用的 Shell 环境</span>
+        </div>
+        <div class="relative group">
+          <select
+            v-model="defaultShell"
+            class="appearance-none bg-black/5 dark:bg-white/10 border-0 rounded-[6px] pl-3 pr-8 py-1 text-[12px] outline-none text-primary min-w-[120px] transition-all cursor-pointer"
+          >
+            <option
+              v-for="shell in shells"
+              :key="shell.value"
+              :value="shell.value"
+              class="bg-background text-primary"
+            >
+              {{ shell.label }}
+            </option>
+          </select>
+          <span
+            class="icon-[lucide--chevron-down] absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-tertiary pointer-events-none"
+          ></span>
+        </div>
+      </div>
+    </section>
+  </div>
 </template>
