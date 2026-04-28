@@ -1176,6 +1176,7 @@ function registerIPCHandlers() {
 		return await machineDb.updateMachine(id, input);
 	});
 	ipcMain.handle("db:delete-machine", async (_event, id) => {
+		await machineDb.deleteMachine(id);
 		return { success: true };
 	});
 	ipcMain.handle("db:get-setting", async (_event, key, defaultValue) => {

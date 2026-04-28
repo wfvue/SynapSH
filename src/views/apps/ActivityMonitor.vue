@@ -126,7 +126,18 @@ async function refreshData() {
   } catch (e: any) {
     console.error("Failed to fetch system stats:", e);
     connectionStatus.value = "error";
-    errorMessage.value = e?.toString?.() || "获取系统数据失败";
+    // 对 "Session not found" 给出更友好的提示
+    const msg = e?.message || e?.toString?.() || "获取系统数据失败";
+    if (msg.includes("Session not found")) {
+      errorMessage.value = "SSH 会话未建立，请先连接服务器";
+      // 会话不存在时停止轮询，避免持续报错
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+      }
+    } else {
+      errorMessage.value = msg;
+    }
   }
 }
 
@@ -156,7 +167,7 @@ watch(
 );
 
 onMounted(() => {
-  refreshData();
+  // refreshData 由 watch immediate 触发，这里只启动定时轮询
   refreshInterval = window.setInterval(refreshData, 2000);
 });
 

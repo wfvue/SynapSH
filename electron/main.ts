@@ -212,6 +212,7 @@ function registerIPCHandlers() {
   });
 
   ipcMain.handle("db:delete-machine", async (_event, id) => {
+    await machineDb.deleteMachine(id);
     return { success: true };
   });
 
