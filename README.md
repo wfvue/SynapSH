@@ -99,10 +99,6 @@ SynapSH 内置数据库管理器，覆盖 **MySQL · SQL Server · MongoDB · Re
   <img src="docs/28452519c6b63d754302e49dd05db87e.png" width="700" alt="机器管理列表">
 </p>
 
-<p align="center">
-  <img src="docs/screenshot-add-machine.png" width="500" alt="添加机器对话框">
-</p>
-
 - **极简添加流程**：填写主机地址、用户名、密码/密钥，选择操作系统类型即可连接
 - **双认证模式**：支持密码认证和 SSH 密钥认证
 - **多操作系统支持**：Linux / Windows / macOS 服务器均可管理
