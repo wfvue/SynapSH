@@ -96,7 +96,7 @@ SynapSH 内置数据库管理器，覆盖 **MySQL · SQL Server · MongoDB · Re
 ### 🔐 安全连接管理——零门槛上手
 
 <p align="center">
-  <img src="docs/screenshot-machine-manager.png" width="700" alt="机器管理列表">
+  <img src="docs/28452519c6b63d754302e49dd05db87e.png" width="700" alt="机器管理列表">
 </p>
 
 <p align="center">

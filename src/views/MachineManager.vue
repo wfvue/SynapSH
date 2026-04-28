@@ -476,40 +476,52 @@ onUnmounted(() => {
 <template>
   <TooltipProvider>
     <div class="flex h-screen w-screen bg-canvas text-primary overflow-hidden">
-      <aside class="app-sidebar" data-tauri-drag-region>
+      <aside class="mm-sidebar" data-tauri-drag-region>
         <div
-          class="h-14 flex items-center px-5 gap-3 font-semibold select-none border-b border-subtle"
+          class="h-14 flex items-center px-5 gap-3 font-semibold select-none border-b border-subtle/50"
           style="-webkit-app-region: drag"
         >
-          <div class="app-icon-container size-8 bg-accent text-accent-foreground">
-            <span class="icon-[mdi--lightning-bolt] size-4.5"></span>
+          <div
+            class="size-8 rounded-[10px] grid place-items-center bg-gradient-to-br from-[#0a84ff] to-[#0066cc] shadow-[0_2px_8px_rgba(10,132,255,0.35)]"
+          >
+            <span class="icon-[mdi--lightning-bolt] size-4.5 text-white"></span>
           </div>
-          <span class="text-primary">SynapSH</span>
+          <span class="text-primary font-bold tracking-tight">SynapSH</span>
         </div>
 
-        <nav class="flex-1 px-3 py-3 space-y-1.5">
-          <a href="#" class="app-sidebar-item app-sidebar-item-active">
+        <nav class="flex-1 px-3 py-4 space-y-1">
+          <a href="#" class="mm-nav-item mm-nav-item-active">
             <span class="icon-[lucide--server] size-4"></span>
             <span>机器</span>
-            <Badge variant="secondary" class="ml-auto text-xs px-2">{{ machines.length }}</Badge>
+            <span
+              class="ml-auto text-[11px] font-semibold bg-white/20 dark:bg-white/10 px-2 py-0.5 rounded-full"
+              >{{ machines.length }}</span
+            >
           </a>
-          <a href="#" class="app-sidebar-item app-sidebar-item-inactive">
+          <a href="#" class="mm-nav-item mm-nav-item-inactive">
             <span class="icon-[lucide--key-round] size-4"></span>
             <span>密钥管理</span>
           </a>
-          <a href="#" class="app-sidebar-item app-sidebar-item-inactive">
+          <a href="#" class="mm-nav-item mm-nav-item-inactive">
             <span class="icon-[lucide--settings] size-4"></span>
             <span>设置</span>
           </a>
         </nav>
 
-        <Separator />
-        <div class="p-4 text-xs text-tertiary">v1.0.0</div>
+        <div class="px-4 py-3 border-t border-subtle/50">
+          <div class="text-[11px] text-tertiary/70 flex items-center gap-1.5">
+            <span class="size-1.5 rounded-full bg-success/60"></span>
+            v1.0.0
+          </div>
+        </div>
       </aside>
 
       <main class="flex-1 flex flex-col bg-canvas overflow-hidden">
-        <header class="app-header" data-tauri-drag-region>
-          <h1 class="app-section-title flex items-center gap-2" style="-webkit-app-region: drag">
+        <header class="mm-header" data-tauri-drag-region>
+          <h1
+            class="flex items-center gap-2.5 text-lg font-bold text-primary"
+            style="-webkit-app-region: drag"
+          >
             <span class="icon-[lucide--server] size-5 text-accent"></span>
             全部机器
             <Badge v-if="selectedCount > 0" variant="secondary" class="text-xs px-2">
@@ -797,66 +809,68 @@ onUnmounted(() => {
               </Button>
             </div>
 
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
+            <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-4">
               <div
                 v-for="machine in group.machines"
                 :key="machine.id"
                 :class="[
-                  'app-card app-card-hover cursor-pointer',
-                  isSelectionMode && selectedMachines.has(machine.id) && 'app-card-selected',
+                  'mm-card group',
+                  isSelectionMode && selectedMachines.has(machine.id) && 'mm-card-selected',
                 ]"
                 @click="connectToMachine(machine)"
               >
-                <div class="flex items-start gap-3 mb-3">
-                  <div v-if="isSelectionMode" class="flex items-center justify-center">
+                <!-- 卡片顶部：OS图标 + 信息 + 操作按钮 -->
+                <div class="flex items-start gap-3.5">
+                  <div v-if="isSelectionMode" class="flex items-center justify-center pt-0.5">
                     <Checkbox
                       :checked="selectedMachines.has(machine.id)"
                       class="app-checkbox"
                       @update:checked="toggleSelection(machine.id)"
                     />
                   </div>
-                  <div v-else class="app-icon-container">
+                  <div v-else :class="['mm-os-icon', `mm-os-icon-${machine.os || 'linux'}`]">
                     <span
                       v-if="machine.os === 'windows'"
-                      class="icon-[mdi--microsoft-windows] size-5 text-info"
+                      class="icon-[mdi--microsoft-windows] size-5 text-white"
                     ></span>
                     <span
                       v-else-if="machine.os === 'macos'"
-                      class="icon-[mdi--apple] size-5 text-secondary"
+                      class="icon-[mdi--apple] size-5 text-white"
                     ></span>
-                    <span v-else class="icon-[mdi--linux] size-5 text-warning"></span>
+                    <span v-else class="icon-[mdi--linux] size-5 text-white"></span>
                   </div>
 
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
-                      <span class="font-medium truncate text-primary">{{
+                      <span class="font-semibold truncate text-primary text-[15px]">{{
                         machine.name || machine.host
                       }}</span>
                       <Tooltip>
                         <TooltipTrigger>
-                          <span class="app-status-dot" :class="getStatusColor(machine.id)"></span>
+                          <span class="mm-status-dot" :class="getStatusColor(machine.id)"></span>
                         </TooltipTrigger>
                         <TooltipContent>{{ getStatusTitle(machine.id) }}</TooltipContent>
                       </Tooltip>
                     </div>
-                    <p class="text-xs text-secondary font-mono truncate mt-1">
+                    <p class="text-xs text-tertiary font-mono truncate mt-1">
                       {{ machine.username }}@{{ machine.host }}:{{ machine.port }}
                     </p>
                   </div>
 
+                  <!-- 操作按钮：hover 可见 -->
                   <div
                     v-if="!isSelectionMode"
-                    class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-120"
+                    class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
                   >
                     <Tooltip>
                       <TooltipTrigger as-child>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          class="app-btn-ghost"
+                          class="size-7 rounded-md text-tertiary hover:text-accent hover:bg-accent/10"
                           @click.stop="testConnection(machine)"
                         >
-                          <span class="icon-[lucide--wifi] size-4"></span>
+                          <span class="icon-[lucide--wifi] size-3.5"></span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>测试连接</TooltipContent>
@@ -866,10 +880,10 @@ onUnmounted(() => {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          class="app-btn-ghost"
+                          class="size-7 rounded-md text-tertiary hover:text-primary hover:bg-active"
                           @click.stop="openEditModal(machine)"
                         >
-                          <span class="icon-[lucide--pencil] size-4"></span>
+                          <span class="icon-[lucide--pencil] size-3.5"></span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>编辑</TooltipContent>
@@ -879,10 +893,10 @@ onUnmounted(() => {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          class="app-btn-danger"
+                          class="size-7 rounded-md text-tertiary hover:text-danger hover:bg-danger/10"
                           @click.stop="openDeleteConfirm(machine)"
                         >
-                          <span class="icon-[lucide--trash-2] size-4"></span>
+                          <span class="icon-[lucide--trash-2] size-3.5"></span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>删除</TooltipContent>
@@ -890,56 +904,57 @@ onUnmounted(() => {
                   </div>
                 </div>
 
+                <!-- 标签区 -->
                 <div
                   v-if="parseTags(machine.tags).length > 0"
-                  class="flex items-center gap-1.5 flex-wrap mb-3"
+                  class="flex items-center gap-1.5 flex-wrap mt-3"
                 >
-                  <Badge
+                  <span
                     v-for="tag in parseTags(machine.tags).slice(0, 3)"
                     :key="tag"
-                    class="app-badge app-badge-secondary text-xs"
+                    class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-accent/10 text-accent border border-accent/20"
                   >
                     {{ tag }}
-                  </Badge>
+                  </span>
                   <Tooltip v-if="parseTags(machine.tags).length > 3">
                     <TooltipTrigger>
-                      <span class="text-xs text-tertiary cursor-help">
+                      <span class="text-[11px] text-tertiary cursor-help">
                         +{{ parseTags(machine.tags).length - 3 }}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
                       <div class="flex gap-1">
-                        <Badge
+                        <span
                           v-for="tag in parseTags(machine.tags).slice(3)"
                           :key="tag"
-                          class="app-badge app-badge-secondary text-xs"
+                          class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-accent/10 text-accent"
                         >
                           {{ tag }}
-                        </Badge>
+                        </span>
                       </div>
                     </TooltipContent>
                   </Tooltip>
                 </div>
 
-                <div class="flex justify-between items-center pt-3 border-t border-subtle">
-                  <span class="text-xs text-tertiary flex items-center gap-1.5">
+                <!-- 底部：时间 + 连接按钮 -->
+                <div class="flex justify-between items-center mt-4 pt-3 border-t border-subtle/60">
+                  <span class="text-[11px] text-tertiary/80 flex items-center gap-1.5">
                     <span class="icon-[lucide--clock] size-3"></span>
                     {{ formatLastUpdated(machine.updatedAt) }}
                   </span>
-                  <Button
+                  <button
                     v-if="!isSelectionMode"
-                    size="sm"
-                    class="app-btn app-btn-primary"
+                    class="mm-connect-btn"
                     @click.stop="connectToMachine(machine)"
                     :disabled="isConnecting === machine.id"
                   >
                     <span
                       v-if="isConnecting === machine.id"
-                      class="icon-[lucide--loader-2] size-4 animate-spin"
+                      class="icon-[lucide--loader-2] size-3.5 animate-spin"
                     ></span>
-                    <span v-else class="icon-[lucide--terminal] size-4"></span>
+                    <span v-else class="icon-[lucide--terminal] size-3.5"></span>
                     {{ isConnecting === machine.id ? "连接中..." : "连接" }}
-                  </Button>
+                  </button>
                 </div>
               </div>
             </div>
