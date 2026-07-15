@@ -13,6 +13,7 @@ import {
 } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 // ==================== 类型定义 ====================
 
@@ -48,6 +49,7 @@ const props = defineProps<{
 // ==================== 状态 ====================
 
 const { toast } = useToast();
+const { text } = useInterfaceLanguage();
 
 const activeTab = ref<DatabaseType>("mysql");
 const dbTypes = ref<DbTypeInfo[]>([
@@ -408,7 +410,7 @@ onMounted(() => {
           class="icon-[mdi--loading] text-4xl text-neutral-300 dark:text-neutral-600 animate-spin block mb-4"
         ></span>
         <p class="text-neutral-500 dark:text-neutral-400">
-          正在检测 {{ activeDbType.name }} 安装状态...
+          {{ text(`Detecting ${activeDbType.name} installation...`, `正在检测 ${activeDbType.name} 安装状态...`) }}
         </p>
       </div>
     </div>
@@ -426,26 +428,36 @@ onMounted(() => {
             <span :class="activeDbType.icon"></span>
           </div>
           <h3 class="text-lg font-semibold text-neutral-800 dark:text-neutral-100 mb-2">
-            当前未安装 {{ activeDbType.name }} 环境/远程数据库
+            {{
+              text(
+                `${activeDbType.name} is not installed and no remote database is configured`,
+                `当前未安装 ${activeDbType.name} 环境/远程数据库`,
+              )
+            }}
           </h3>
           <p class="text-sm text-neutral-500 dark:text-neutral-400 mb-6">
-            您可以选择添加远程数据库连接，或者在当前服务器上安装 {{ activeDbType.name }}
+            {{
+              text(
+                `Add a remote connection or install ${activeDbType.name} on this server.`,
+                `您可以选择添加远程数据库连接，或者在当前服务器上安装 ${activeDbType.name}`,
+              )
+            }}
           </p>
           <div class="flex items-center justify-center gap-3">
             <Button variant="outline" class="gap-2" @click="addRemoteDatabase">
               <span class="icon-[mdi--cloud-plus]"></span>
-              添加远程数据库
+              {{ text("Add remote database", "添加远程数据库") }}
             </Button>
             <Button variant="outline" class="gap-2" @click="readLocalDatabase">
               <span class="icon-[mdi--refresh]"></span>
-              读取本地 {{ activeDbType.name }}
+              {{ text(`Detect local ${activeDbType.name}`, `读取本地 ${activeDbType.name}`) }}
             </Button>
             <Button
               class="gap-2 bg-green-500 hover:bg-green-600 text-white"
               @click="openInstallModal"
             >
               <span class="icon-[mdi--download]"></span>
-              安装 {{ activeDbType.name }}
+              {{ text(`Install ${activeDbType.name}`, `安装 ${activeDbType.name}`) }}
             </Button>
           </div>
         </div>

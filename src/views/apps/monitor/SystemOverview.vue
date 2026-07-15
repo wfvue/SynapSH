@@ -3,6 +3,9 @@
   展示主机名、运行时间、CPU、内存等系统信息
 -->
 <script setup lang="ts">
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
+
+const { isEnglish, text } = useInterfaceLanguage();
 const props = defineProps<{
   hostname?: string;
   uptime?: string;
@@ -23,6 +26,7 @@ function formatBytes(bytes: number): string {
 // 格式化运行时间
 function formatUptime(uptime: string | undefined): string {
   if (!uptime) return "---";
+  if (isEnglish.value) return uptime.replace(/^up\s+/, "");
   // 将 "up 3 days, 6 hours, 8 minutes" 转换为 "3天6时8分"
   return uptime
     .replace(/^up\s+/, "") // 移除开头的 "up "
@@ -41,7 +45,7 @@ function formatUptime(uptime: string | undefined): string {
     >
       <span class="icon-[mdi--server] text-2xl text-sky-400/70"></span>
       <div class="flex flex-col gap-0.5 min-w-0">
-        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">主机名</span>
+        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">{{ text("Hostname", "主机名") }}</span>
         <span class="text-sm text-foreground/90 font-medium truncate">{{ hostname || "---" }}</span>
       </div>
     </div>
@@ -51,7 +55,7 @@ function formatUptime(uptime: string | undefined): string {
     >
       <span class="icon-[mdi--clock-outline] text-2xl text-sky-400/70"></span>
       <div class="flex flex-col gap-0.5 min-w-0">
-        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">运行时间</span>
+        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">{{ text("Uptime", "运行时间") }}</span>
         <span class="text-sm text-foreground/90 font-medium truncate">{{
           formatUptime(uptime)
         }}</span>
@@ -63,9 +67,9 @@ function formatUptime(uptime: string | undefined): string {
     >
       <span class="icon-[mdi--chip] text-2xl text-sky-400/70"></span>
       <div class="flex flex-col gap-0.5 min-w-0">
-        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">CPU 核心</span>
+        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">{{ text("CPU cores", "CPU 核心") }}</span>
         <span class="text-sm text-foreground/90 font-medium truncate"
-          >{{ cpuCores ?? "---" }} 核</span
+          >{{ cpuCores ?? "---" }} {{ text("cores", "核") }}</span
         >
       </div>
     </div>
@@ -75,7 +79,7 @@ function formatUptime(uptime: string | undefined): string {
     >
       <span class="icon-[mdi--memory] text-2xl text-sky-400/70"></span>
       <div class="flex flex-col gap-0.5 min-w-0">
-        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">总内存</span>
+        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">{{ text("Total memory", "总内存") }}</span>
         <span class="text-sm text-foreground/90 font-medium truncate">{{
           totalMemory ? formatBytes(totalMemory) : "---"
         }}</span>
@@ -87,7 +91,7 @@ function formatUptime(uptime: string | undefined): string {
     >
       <span class="icon-[mdi--gauge] text-2xl text-sky-400/70"></span>
       <div class="flex flex-col gap-0.5 min-w-0">
-        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">负载平均</span>
+        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">{{ text("Load average", "负载平均") }}</span>
         <span class="text-sm text-foreground/90 font-medium truncate" v-if="loadAverage">
           {{ loadAverage[0].toFixed(2) }} / {{ loadAverage[1].toFixed(2) }} /
           {{ loadAverage[2].toFixed(2) }}
@@ -101,7 +105,7 @@ function formatUptime(uptime: string | undefined): string {
     >
       <span class="icon-[mdi--linux] text-2xl text-sky-400/70"></span>
       <div class="flex flex-col gap-0.5 min-w-0">
-        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">内核版本</span>
+        <span class="text-[0.7rem] text-muted-foreground uppercase tracking-wider">{{ text("Kernel version", "内核版本") }}</span>
         <span class="text-sm text-foreground/90 font-medium truncate">{{
           kernelVersion || "---"
         }}</span>

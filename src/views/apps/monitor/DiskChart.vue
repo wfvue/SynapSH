@@ -5,6 +5,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
+
+const { text } = useInterfaceLanguage();
 
 export interface DiskInfo {
   name: string;
@@ -19,6 +22,7 @@ const props = defineProps<{
 
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+const resizeChart = () => chart?.resize();
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -67,7 +71,7 @@ function updateChart() {
     },
     series: [
       {
-        name: "已使用",
+        name: text("Used", "已使用"),
         type: "bar",
         stack: "total",
         barWidth: "50%",
@@ -81,7 +85,7 @@ function updateChart() {
         data: props.disks.map((d) => d.used),
       },
       {
-        name: "可用",
+        name: text("Available", "可用"),
         type: "bar",
         stack: "total",
         barWidth: "50%",
@@ -101,8 +105,8 @@ function updateChart() {
         const disk = props.disks[params[0].dataIndex];
         const usedPercent = ((disk.used / disk.total) * 100).toFixed(1);
         return `${disk.mountPoint}<br/>
-                已使用: ${formatBytes(disk.used)} (${usedPercent}%)<br/>
-                总计: ${formatBytes(disk.total)}`;
+                ${text("Used", "已使用")}: ${formatBytes(disk.used)} (${usedPercent}%)<br/>
+                ${text("Total", "总计")}: ${formatBytes(disk.total)}`;
       },
     },
   };
@@ -114,20 +118,22 @@ watch(() => props.disks, updateChart, { deep: true });
 
 onMounted(() => {
   initChart();
-  window.addEventListener("resize", () => chart?.resize());
+  window.addEventListener("resize", resizeChart);
 });
 
 onUnmounted(() => {
   chart?.dispose();
-  window.removeEventListener("resize", () => chart?.resize());
+  window.removeEventListener("resize", resizeChart);
 });
 </script>
 
 <template>
   <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
     <div class="flex justify-between items-center mb-3">
-      <span class="text-sm font-medium text-foreground/80">磁盘使用</span>
-      <span class="text-xs text-muted-foreground">{{ disks.length }} 个分区</span>
+      <span class="text-sm font-medium text-foreground/80">{{ text("Disk usage", "磁盘使用") }}</span>
+      <span class="text-xs text-muted-foreground">
+        {{ disks.length }} {{ text("partitions", "个分区") }}
+      </span>
     </div>
     <div ref="chartRef" class="flex-1 min-h-[150px]"></div>
   </div>

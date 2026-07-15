@@ -5,6 +5,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
+
+const { text } = useInterfaceLanguage();
 
 const props = defineProps<{
   total: number;
@@ -15,6 +18,7 @@ const props = defineProps<{
 
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+const resizeChart = () => chart?.resize();
 
 const usedPercent = computed(() =>
   props.total > 0 ? ((props.used / props.total) * 100).toFixed(1) : "0",
@@ -40,7 +44,7 @@ function updateChart() {
   const option: echarts.EChartsOption = {
     series: [
       {
-        name: "内存",
+        name: text("Memory", "内存"),
         type: "pie",
         radius: ["60%", "80%"],
         center: ["50%", "50%"],
@@ -59,7 +63,7 @@ function updateChart() {
         data: [
           {
             value: props.used,
-            name: "已使用",
+            name: text("Used", "已使用"),
             itemStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                 { offset: 0, color: "#f59e0b" },
@@ -69,12 +73,12 @@ function updateChart() {
           },
           {
             value: props.cached,
-            name: "缓存",
+            name: text("Cached", "缓存"),
             itemStyle: { color: "rgba(59, 130, 246, 0.6)" },
           },
           {
             value: props.free,
-            name: "可用",
+            name: text("Available", "可用"),
             itemStyle: { color: "rgba(255, 255, 255, 0.08)" },
           },
         ],
@@ -98,42 +102,42 @@ watch(() => [props.used, props.free, props.cached], updateChart);
 
 onMounted(() => {
   initChart();
-  window.addEventListener("resize", () => chart?.resize());
+  window.addEventListener("resize", resizeChart);
 });
 
 onUnmounted(() => {
   chart?.dispose();
-  window.removeEventListener("resize", () => chart?.resize());
+  window.removeEventListener("resize", resizeChart);
 });
 </script>
 
 <template>
   <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
     <div class="flex justify-between items-center mb-2">
-      <span class="text-sm font-medium text-foreground/80">内存使用率</span>
+      <span class="text-sm font-medium text-foreground/80">{{ text("Memory usage", "内存使用率") }}</span>
       <span class="text-xl font-semibold text-amber-400">{{ usedPercent }}%</span>
     </div>
     <div class="relative flex-1 min-h-[160px]">
       <div ref="chartRef" class="w-full h-full"></div>
       <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
         <div class="text-base font-semibold text-foreground">{{ formatBytes(used) }}</div>
-        <div class="text-[0.7rem] text-muted-foreground">已使用</div>
+        <div class="text-[0.7rem] text-muted-foreground">{{ text("Used", "已使用") }}</div>
       </div>
     </div>
     <div class="flex justify-around mt-2 pt-3 border-t border-border/30">
       <div class="flex flex-col items-center gap-1">
         <span class="w-2 h-2 rounded-full bg-gradient-to-br from-amber-500 to-amber-300"></span>
-        <span class="text-[0.7rem] text-muted-foreground">已使用</span>
+        <span class="text-[0.7rem] text-muted-foreground">{{ text("Used", "已使用") }}</span>
         <span class="text-xs text-foreground/80 font-medium">{{ formatBytes(used) }}</span>
       </div>
       <div class="flex flex-col items-center gap-1">
         <span class="w-2 h-2 rounded-full bg-blue-500/60"></span>
-        <span class="text-[0.7rem] text-muted-foreground">缓存</span>
+        <span class="text-[0.7rem] text-muted-foreground">{{ text("Cached", "缓存") }}</span>
         <span class="text-xs text-foreground/80 font-medium">{{ formatBytes(cached) }}</span>
       </div>
       <div class="flex flex-col items-center gap-1">
         <span class="w-2 h-2 rounded-full bg-white/20"></span>
-        <span class="text-[0.7rem] text-muted-foreground">可用</span>
+        <span class="text-[0.7rem] text-muted-foreground">{{ text("Available", "可用") }}</span>
         <span class="text-xs text-foreground/80 font-medium">{{ formatBytes(free) }}</span>
       </div>
     </div>

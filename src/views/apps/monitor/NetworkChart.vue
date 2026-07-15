@@ -5,6 +5,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
+
+const { text } = useInterfaceLanguage();
 
 const props = defineProps<{
   rxData: number[];
@@ -13,6 +16,7 @@ const props = defineProps<{
 
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+const resizeChart = () => chart?.resize();
 
 function formatSpeed(bytesPerSec: number): string {
   if (bytesPerSec === 0) return "0 B/s";
@@ -67,7 +71,7 @@ function initChart() {
     },
     series: [
       {
-        name: "下载",
+        name: text("Download", "下载"),
         type: "line",
         smooth: true,
         symbol: "none",
@@ -84,7 +88,7 @@ function initChart() {
         data: props.rxData,
       },
       {
-        name: "上传",
+        name: text("Upload", "上传"),
         type: "line",
         smooth: true,
         symbol: "none",
@@ -123,19 +127,19 @@ watch(() => [props.rxData, props.txData], updateChart, { deep: true });
 
 onMounted(() => {
   initChart();
-  window.addEventListener("resize", () => chart?.resize());
+  window.addEventListener("resize", resizeChart);
 });
 
 onUnmounted(() => {
   chart?.dispose();
-  window.removeEventListener("resize", () => chart?.resize());
+  window.removeEventListener("resize", resizeChart);
 });
 </script>
 
 <template>
   <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
     <div class="flex justify-between items-center mb-3">
-      <span class="text-sm font-medium text-foreground/80">网络流量</span>
+      <span class="text-sm font-medium text-foreground/80">{{ text("Network traffic", "网络流量") }}</span>
       <div class="flex gap-3">
         <span class="text-xs font-medium text-blue-400">↓ {{ currentRx }}</span>
         <span class="text-xs font-medium text-amber-400">↑ {{ currentTx }}</span>

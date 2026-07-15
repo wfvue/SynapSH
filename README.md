@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="public/logo.svg" width="80" height="80" alt="SynapSH Logo">
+  <img src="public/logo.png" width="80" height="80" alt="SynapSH Logo">
 </p>
 
 <h1 align="center">SynapSH · 光析</h1>
@@ -24,7 +24,7 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshot-desktop.png" width="800" alt="SynapSH desktop environment">
+  <img src="docs/screenshot-desktop-en.png" width="800" alt="SynapSH desktop environment">
 </p>
 
 <p align="center"><em>The moment you connect to a server, you get more than a terminal—you get an entire desktop.</em></p>
@@ -46,7 +46,7 @@ After connecting, you see a macOS-inspired desktop instead of a blinking cursor.
 ### 🖥️ A True Desktop Experience—a New Paradigm, Not a Simulation
 
 <p align="center">
-  <img src="docs/screenshot-desktop.png" width="700" alt="Desktop environment overview">
+  <img src="docs/screenshot-desktop-en.png" width="700" alt="Desktop environment overview">
 </p>
 
 Traditional SSH clients give you terminal tabs. SynapSH gives you a server desktop.
@@ -59,7 +59,7 @@ Traditional SSH clients give you terminal tabs. SynapSH gives you a server deskt
 ### 📂 Visual File Management—Just Like Working with Local Files
 
 <p align="center">
-  <img src="docs/screenshot-file-manager.png" width="700" alt="File manager">
+  <img src="docs/screenshot-file-manager-en.png" width="700" alt="File manager">
 </p>
 
 Leave `ls`, `cd`, and `scp` behind. Built on SFTP, the SynapSH file manager provides a complete graphical workflow:
@@ -73,7 +73,7 @@ Leave `ls`, `cd`, and `scp` behind. Built on SFTP, the SynapSH file manager prov
 ### 📊 Real-Time Performance Monitoring—No More Staring at `top`
 
 <p align="center">
-  <img src="docs/screenshot-activity-monitor.png" width="700" alt="Activity monitor">
+  <img src="docs/screenshot-activity-monitor-en.png" width="700" alt="Activity monitor">
 </p>
 
 The Activity Monitor is one of SynapSH's signature features, turning raw system metrics into a clear visual dashboard:
@@ -87,7 +87,7 @@ The Activity Monitor is one of SynapSH's signature features, turning raw system 
 ### 🗄️ Database Management—Six Popular Databases, Ready to Use
 
 <p align="center">
-  <img src="docs/screenshot-database-manager.png" width="700" alt="Database manager">
+  <img src="docs/screenshot-database-manager-en.png" width="700" alt="Database manager">
 </p>
 
 SynapSH includes a database manager for **MySQL · SQL Server · MongoDB · Redis · PostgreSQL · SQLite**:
@@ -100,7 +100,7 @@ SynapSH includes a database manager for **MySQL · SQL Server · MongoDB · Redi
 ### 🔐 Secure Connection Management—Easy from the First Click
 
 <p align="center">
-  <img src="docs/28452519c6b63d754302e49dd05db87e.png" width="700" alt="Machine management list">
+  <img src="docs/screenshot-machine-manager-en.png" width="700" alt="Machine management list">
 </p>
 
 - **Simple setup:** Enter the host, username, password or key, and operating system to connect

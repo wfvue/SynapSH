@@ -3,7 +3,7 @@
   系统资源监控面板，支持 CPU、内存、磁盘、网络和进程监控
 -->
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from "vue";
+import { computed, ref, onMounted, onUnmounted, watch } from "vue";
 import { api } from "@/lib/api";
 import CpuChart from "./monitor/CpuChart.vue";
 import MemoryChart from "./monitor/MemoryChart.vue";
@@ -13,10 +13,12 @@ import ProcessList, { type ProcessInfo } from "./monitor/ProcessList.vue";
 import ProcessDetail from "./monitor/ProcessDetail.vue";
 import SystemOverview from "./monitor/SystemOverview.vue";
 import { AlertCircle, RefreshCw } from "lucide-vue-next";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 const props = defineProps<{
   sessionId: string;
 }>();
+const { text } = useInterfaceLanguage();
 
 type TabId = "overview" | "cpu" | "memory" | "disk" | "network" | "processes";
 type ConnectionStatus = "connecting" | "connected" | "error" | "idle";
@@ -31,14 +33,14 @@ const errorMessage = ref<string>("");
 const selectedProcess = ref<ProcessInfo | null>(null);
 const detailVisible = ref(false);
 
-const tabs: { id: TabId; label: string; icon: string }[] = [
-  { id: "overview", label: "概览", icon: "icon-[mdi--view-dashboard]" },
+const tabs = computed<{ id: TabId; label: string; icon: string }[]>(() => [
+  { id: "overview", label: text("Overview", "概览"), icon: "icon-[mdi--view-dashboard]" },
   { id: "cpu", label: "CPU", icon: "icon-[mdi--chip]" },
-  { id: "memory", label: "内存", icon: "icon-[mdi--memory]" },
-  { id: "disk", label: "磁盘", icon: "icon-[mdi--harddisk]" },
-  { id: "network", label: "网络", icon: "icon-[mdi--access-point-network]" },
-  { id: "processes", label: "进程", icon: "icon-[mdi--format-list-bulleted]" },
-];
+  { id: "memory", label: text("Memory", "内存"), icon: "icon-[mdi--memory]" },
+  { id: "disk", label: text("Disk", "磁盘"), icon: "icon-[mdi--harddisk]" },
+  { id: "network", label: text("Network", "网络"), icon: "icon-[mdi--access-point-network]" },
+  { id: "processes", label: text("Processes", "进程"), icon: "icon-[mdi--format-list-bulleted]" },
+]);
 
 // 接口定义 (与 Rust 后端一致)
 interface MemoryInfo {
@@ -93,7 +95,7 @@ let lastNetworkStats: NetworkInfo | null = null;
 async function refreshData() {
   if (!props.sessionId || props.sessionId === "default-session") {
     connectionStatus.value = "error";
-    errorMessage.value = "未连接到 SSH 会话";
+    errorMessage.value = text("Not connected to an SSH session", "未连接到 SSH 会话");
     return;
   }
 
@@ -127,9 +129,12 @@ async function refreshData() {
     console.error("Failed to fetch system stats:", e);
     connectionStatus.value = "error";
     // 对 "Session not found" 给出更友好的提示
-    const msg = e?.message || e?.toString?.() || "获取系统数据失败";
+    const msg = e?.message || e?.toString?.() || text("Failed to load system data", "获取系统数据失败");
     if (msg.includes("Session not found")) {
-      errorMessage.value = "SSH 会话未建立，请先连接服务器";
+      errorMessage.value = text(
+        "The SSH session is not available. Connect to the server first.",
+        "SSH 会话未建立，请先连接服务器",
+      );
       // 会话不存在时停止轮询，避免持续报错
       if (refreshInterval) {
         clearInterval(refreshInterval);
@@ -192,7 +197,7 @@ onUnmounted(() => {
         @click="refreshData"
       >
         <RefreshCw class="w-3.5 h-3.5" />
-        重试
+        {{ text("Retry", "重试") }}
       </button>
     </div>
 

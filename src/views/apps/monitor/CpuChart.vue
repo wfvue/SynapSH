@@ -5,6 +5,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import * as echarts from "echarts";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
+
+const { text } = useInterfaceLanguage();
 
 const props = defineProps<{
   cpuData: number[];
@@ -13,16 +16,18 @@ const props = defineProps<{
 
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+const resizeChart = () => chart?.resize();
 
 const currentValue = computed(() => {
   const val = props.cpuData[props.cpuData.length - 1] ?? 0;
-  return val.toFixed(1);
+  return (Number.isFinite(val) ? val : 0).toFixed(1);
 });
 
 const avgValue = computed(() => {
-  if (props.cpuData.length === 0) return "0.0";
-  const sum = props.cpuData.reduce((a, b) => a + b, 0);
-  return (sum / props.cpuData.length).toFixed(1);
+  const values = props.cpuData.filter(Number.isFinite);
+  if (values.length === 0) return "0.0";
+  const sum = values.reduce((a, b) => a + b, 0);
+  return (sum / values.length).toFixed(1);
 });
 
 function initChart() {
@@ -106,12 +111,12 @@ watch(() => props.cpuData, updateChart, { deep: true });
 
 onMounted(() => {
   initChart();
-  window.addEventListener("resize", () => chart?.resize());
+  window.addEventListener("resize", resizeChart);
 });
 
 onUnmounted(() => {
   chart?.dispose();
-  window.removeEventListener("resize", () => chart?.resize());
+  window.removeEventListener("resize", resizeChart);
 });
 </script>
 
@@ -119,22 +124,22 @@ onUnmounted(() => {
   <div class="h-full flex flex-col bg-card/50 rounded-2xl p-4 border border-border/50">
     <div class="flex justify-between items-center mb-3">
       <div class="flex items-center gap-2.5">
-        <span class="text-sm font-medium text-foreground/80">CPU 使用率</span>
+        <span class="text-sm font-medium text-foreground/80">{{ text("CPU usage", "CPU 使用率") }}</span>
         <span
           v-if="coreCount"
           class="text-[0.7rem] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded"
-          >{{ coreCount }} 核</span
+          >{{ coreCount }} {{ text("cores", "核") }}</span
         >
       </div>
       <div class="flex gap-4">
         <div class="flex flex-col items-end gap-0.5">
-          <span class="text-[0.65rem] text-muted-foreground uppercase">当前</span>
+          <span class="text-[0.65rem] text-muted-foreground uppercase">{{ text("Current", "当前") }}</span>
           <span class="text-[1.1rem] font-semibold text-emerald-400 font-mono"
             >{{ currentValue }}%</span
           >
         </div>
         <div class="flex flex-col items-end gap-0.5">
-          <span class="text-[0.65rem] text-muted-foreground uppercase">平均</span>
+          <span class="text-[0.65rem] text-muted-foreground uppercase">{{ text("Average", "平均") }}</span>
           <span class="text-[0.9rem] font-semibold text-foreground/70 font-mono"
             >{{ avgValue }}%</span
           >

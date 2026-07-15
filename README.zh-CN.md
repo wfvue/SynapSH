@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="public/logo.svg" width="80" height="80" alt="SynapSH Logo">
+  <img src="public/logo.png" width="80" height="80" alt="SynapSH Logo">
 </p>
 
 <h1 align="center">SynapSH · 光析</h1>

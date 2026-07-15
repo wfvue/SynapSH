@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, watch, onUnmounted } from "vue";
 import { api } from "@/lib/api";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 interface Props {
   sessionId?: string;
@@ -10,6 +11,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   initialPath: "/",
 });
+const { language, text } = useInterfaceLanguage();
 
 // 定义事件
 const emit = defineEmits<{
@@ -171,7 +173,7 @@ function formatDate(dateStr?: string): string {
   if (!dateStr) return "--";
   try {
     const date = new Date(dateStr);
-    return new Intl.DateTimeFormat("zh-CN", {
+    return new Intl.DateTimeFormat(language.value, {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -518,7 +520,7 @@ const detailsFile = computed(() =>
           class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-30 transition text-xl"
           :disabled="historyIndex <= 0"
           @click="goBack"
-          title="后退"
+          :title="text('Back', '后退')"
         >
           <span class="icon-[mdi--chevron-left]"></span>
         </button>
@@ -526,21 +528,21 @@ const detailsFile = computed(() =>
           class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-30 transition text-xl"
           :disabled="historyIndex >= history.length - 1"
           @click="goForward"
-          title="前进"
+          :title="text('Forward', '前进')"
         >
           <span class="icon-[mdi--chevron-right]"></span>
         </button>
         <button
           class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition text-xl"
           @click="goUp"
-          title="上级目录"
+          :title="text('Parent folder', '上级目录')"
         >
           <span class="icon-[mdi--arrow-up]"></span>
         </button>
         <button
           class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition text-xl"
           @click="refresh"
-          title="刷新"
+          :title="text('Refresh', '刷新')"
         >
           <span class="icon-[mdi--refresh]" :class="{ 'animate-spin': isLoading }"></span>
         </button>
@@ -567,7 +569,7 @@ const detailsFile = computed(() =>
         ></span>
         <input
           v-model="searchQuery"
-          placeholder="搜索"
+          :placeholder="text('Search', '搜索')"
           class="w-full bg-muted/30 border border-border/50 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:bg-muted/50 focus:border-border transition-all placeholder-muted-foreground text-foreground"
         />
       </div>
@@ -579,14 +581,14 @@ const detailsFile = computed(() =>
         <button
           @click="showNewFileModal = true"
           class="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition text-xl"
-          title="新建文件"
+          :title="text('New file', '新建文件')"
         >
           <span class="icon-[mdi--file-plus]"></span>
         </button>
         <button
           @click="createFolder"
           class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition text-xl"
-          title="新建文件夹"
+          :title="text('New folder', '新建文件夹')"
         >
           <span class="icon-[mdi--folder-plus]"></span>
         </button>
@@ -604,7 +606,7 @@ const detailsFile = computed(() =>
               ? 'bg-accent text-accent-foreground'
               : 'text-muted-foreground hover:text-foreground',
           ]"
-          title="列表视图"
+          :title="text('List view', '列表视图')"
         >
           <span class="icon-[mdi--view-list]"></span>
         </button>
@@ -616,7 +618,7 @@ const detailsFile = computed(() =>
               ? 'bg-white/10 text-white'
               : 'text-neutral-500 hover:text-neutral-300',
           ]"
-          title="网格视图"
+          :title="text('Grid view', '网格视图')"
         >
           <span class="icon-[mdi--view-grid]"></span>
         </button>
@@ -630,7 +632,7 @@ const detailsFile = computed(() =>
             ? 'bg-primary/20 text-primary'
             : 'text-muted-foreground hover:text-foreground hover:bg-accent',
         ]"
-        title="显示隐藏文件"
+        :title="text('Show hidden files', '显示隐藏文件')"
       >
         <span class="icon-[mdi--eye]"></span>
       </button>
@@ -643,7 +645,7 @@ const detailsFile = computed(() =>
             ? 'bg-blue-500/20 text-blue-400'
             : 'text-neutral-500 hover:text-white hover:bg-white/10',
         ]"
-        title="详情面板"
+        :title="text('Details panel', '详情面板')"
       >
         <span class="icon-[mdi--information-outline]"></span>
       </button>
@@ -659,15 +661,15 @@ const detailsFile = computed(() =>
           <div
             class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-1.5"
           >
-            收藏
+            {{ text("Favorites", "收藏") }}
           </div>
           <div class="flex flex-col gap-0.5">
             <button
               v-for="item in [
-                { path: '/home', icon: 'icon-[mdi--account-group]', name: '用户目录' },
-                { path: '/tmp', icon: 'icon-[mdi--folder-clock]', name: '临时目录' },
-                { path: '/var/log', icon: 'icon-[mdi--file-document-outline]', name: '日志' },
-                { path: '/etc', icon: 'icon-[mdi--cog]', name: '配置' },
+                { path: '/home', icon: 'icon-[mdi--account-group]', name: text('Home', '用户目录') },
+                { path: '/tmp', icon: 'icon-[mdi--folder-clock]', name: text('Temporary', '临时目录') },
+                { path: '/var/log', icon: 'icon-[mdi--file-document-outline]', name: text('Logs', '日志') },
+                { path: '/etc', icon: 'icon-[mdi--cog]', name: text('Configuration', '配置') },
               ]"
               :key="item.path"
               @click="navigateTo(item.path)"
@@ -687,7 +689,7 @@ const detailsFile = computed(() =>
           <div
             class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-1.5"
           >
-            系统
+            {{ text("System", "系统") }}
           </div>
           <div class="flex flex-col gap-0.5">
             <button
@@ -700,7 +702,7 @@ const detailsFile = computed(() =>
               ]"
             >
               <span class="icon-[mdi--harddisk]"></span>
-              根目录
+              {{ text("Root", "根目录") }}
             </button>
           </div>
         </div>
@@ -738,7 +740,7 @@ const detailsFile = computed(() =>
           class="h-full flex flex-col items-center justify-center text-muted-foreground"
         >
           <span class="icon-[mdi--folder-open-outline] text-6xl mb-3 opacity-50"></span>
-          <p class="text-sm">文件夹为空</p>
+          <p class="text-sm">{{ text("This folder is empty", "文件夹为空") }}</p>
         </div>
 
         <!-- Content -->
@@ -754,7 +756,7 @@ const detailsFile = computed(() =>
                 @click="toggleSort('name')"
                 class="text-left flex items-center gap-1 hover:text-foreground transition"
               >
-                名称
+                {{ text("Name", "名称") }}
                 <span
                   v-if="sortField === 'name'"
                   :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
@@ -765,7 +767,7 @@ const detailsFile = computed(() =>
                 @click="toggleSort('modifiedTime')"
                 class="text-right flex items-center justify-end gap-1 hover:text-foreground transition"
               >
-                修改时间
+                {{ text("Modified", "修改时间") }}
                 <span
                   v-if="sortField === 'modifiedTime'"
                   :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
@@ -776,14 +778,14 @@ const detailsFile = computed(() =>
                 @click="toggleSort('size')"
                 class="text-right flex items-center justify-end gap-1 hover:text-foreground transition"
               >
-                大小
+                {{ text("Size", "大小") }}
                 <span
                   v-if="sortField === 'size'"
                   :class="sortOrder === 'asc' ? 'icon-[mdi--arrow-up]' : 'icon-[mdi--arrow-down]'"
                   class="text-xs"
                 ></span>
               </button>
-              <span class="text-right">权限</span>
+              <span class="text-right">{{ text("Permissions", "权限") }}</span>
             </div>
             <!-- Rows -->
             <div
@@ -1181,11 +1183,13 @@ const detailsFile = computed(() =>
           class="w-1.5 h-1.5 rounded-full"
           :class="props.sessionId ? 'bg-success' : 'bg-destructive'"
         ></span>
-        {{ props.sessionId ? "已连接" : "未连接" }}
+        {{ props.sessionId ? text("Connected", "已连接") : text("Disconnected", "未连接") }}
       </span>
       <span class="flex gap-4">
-        <span>{{ displayedFiles.length }} 个项目</span>
-        <span v-if="selectedFiles.length > 0">{{ selectedFiles.length }} 个选中</span>
+        <span>{{ displayedFiles.length }} {{ text("items", "个项目") }}</span>
+        <span v-if="selectedFiles.length > 0">
+          {{ selectedFiles.length }} {{ text("selected", "个选中") }}
+        </span>
       </span>
     </footer>
   </div>
