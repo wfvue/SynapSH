@@ -7,6 +7,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useColorMode, useLocalStorage } from "@vueuse/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 export interface Tab {
   id: string;
@@ -29,6 +30,7 @@ const emit = defineEmits<{
 }>();
 
 const isHovered = ref(false);
+const { text } = useInterfaceLanguage();
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -56,12 +58,12 @@ const trailingInset = computed(() => "8px");
 const contentOffsetClass = computed(() => (isMac.value ? "-translate-y-px" : ""));
 
 const accentColors = [
-  { value: "#0a84ff", name: "蓝色" },
-  { value: "#22c55e", name: "绿色" },
-  { value: "#f59e0b", name: "橙色" },
-  { value: "#ef4444", name: "红色" },
-  { value: "#14b8a6", name: "青色" },
-  { value: "#a855f7", name: "紫色" },
+  { value: "#0a84ff", nameEn: "Blue", nameZh: "蓝色" },
+  { value: "#22c55e", nameEn: "Green", nameZh: "绿色" },
+  { value: "#f59e0b", nameEn: "Orange", nameZh: "橙色" },
+  { value: "#ef4444", nameEn: "Red", nameZh: "红色" },
+  { value: "#14b8a6", nameEn: "Teal", nameZh: "青色" },
+  { value: "#a855f7", nameEn: "Purple", nameZh: "紫色" },
 ];
 
 function applyAccentColor(color: string) {
@@ -144,7 +146,7 @@ onMounted(() => {
       <button
         class="shrink-0 flex items-center justify-center size-6 rounded-md border-none bg-transparent text-muted-foreground cursor-pointer transition-all duration-150 hover:bg-accent hover:text-foreground"
         @click="emit('new-tab', '')"
-        title="新建标签页"
+        :title="text('New tab', '新建标签页')"
       >
         <span class="icon-[mdi--plus] text-base"></span>
       </button>
@@ -155,7 +157,7 @@ onMounted(() => {
         <button
           class="flex items-center justify-center size-6 rounded-md border-none bg-transparent text-muted-foreground cursor-pointer transition-all duration-150 hover:bg-accent hover:text-foreground"
           :class="isAppearanceOpen ? 'bg-accent text-foreground' : ''"
-          title="系统外观设置"
+          :title="text('Appearance settings', '系统外观设置')"
           @click="toggleAppearanceMenu"
         >
           <span class="icon-[mdi--palette-outline] text-base"></span>
@@ -163,39 +165,45 @@ onMounted(() => {
 
         <DialogContent class="tab-appearance-dialog w-72 rounded-2xl border p-4">
           <DialogHeader class="mb-3">
-            <DialogTitle class="tab-appearance-title text-base font-medium">外观设置</DialogTitle>
+            <DialogTitle class="tab-appearance-title text-base font-medium">{{
+              text("Appearance", "外观设置")
+            }}</DialogTitle>
           </DialogHeader>
 
           <div class="space-y-4">
             <div>
-              <div class="tab-appearance-label text-xs mb-2">主题模式</div>
+              <div class="tab-appearance-label text-xs mb-2">
+                {{ text("Theme mode", "主题模式") }}
+              </div>
               <div class="grid grid-cols-3 gap-2">
                 <button
                   class="tab-appearance-option h-8 rounded-lg text-xs transition-colors border"
                   :class="themeMode === 'light' ? 'is-active' : ''"
                   @click="themeMode = 'light'"
                 >
-                  浅色
+                  {{ text("Light", "浅色") }}
                 </button>
                 <button
                   class="tab-appearance-option h-8 rounded-lg text-xs transition-colors border"
                   :class="themeMode === 'dark' ? 'is-active' : ''"
                   @click="themeMode = 'dark'"
                 >
-                  深色
+                  {{ text("Dark", "深色") }}
                 </button>
                 <button
                   class="tab-appearance-option h-8 rounded-lg text-xs transition-colors border"
                   :class="themeMode === 'auto' ? 'is-active' : ''"
                   @click="themeMode = 'auto'"
                 >
-                  自动
+                  {{ text("Auto", "自动") }}
                 </button>
               </div>
             </div>
 
             <div>
-              <div class="tab-appearance-label text-xs mb-2">强调色</div>
+              <div class="tab-appearance-label text-xs mb-2">
+                {{ text("Accent color", "强调色") }}
+              </div>
               <div class="flex items-center gap-2">
                 <button
                   v-for="color in accentColors"
@@ -203,7 +211,7 @@ onMounted(() => {
                   class="tab-appearance-color size-6 rounded-full border transition-transform hover:scale-110"
                   :class="accentColor === color.value ? 'is-active' : ''"
                   :style="{ backgroundColor: color.value }"
-                  :title="color.name"
+                  :title="text(color.nameEn, color.nameZh)"
                   @click="applyAccentColor(color.value)"
                 >
                   <span

@@ -16,6 +16,9 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
+
+const { text } = useInterfaceLanguage();
 
 const emit = defineEmits<{
   connect: [
@@ -128,7 +131,9 @@ const filteredMachines = computed(() => {
 
 const groupedMachines = computed(() => {
   if (groupMode.value === "none") {
-    return [{ key: "all", label: "全部机器", machines: filteredMachines.value }];
+    return [
+      { key: "all", label: text("All machines", "全部机器"), machines: filteredMachines.value },
+    ];
   }
 
   const groups: Map<string, { label: string; machines: Machine[] }> = new Map();
@@ -142,7 +147,8 @@ const groupedMachines = computed(() => {
     } else if (groupMode.value === "tag") {
       const tags = parseTags(m.tags);
       if (tags.length === 0) {
-        if (!groups.has("untagged")) groups.set("untagged", { label: "未标记", machines: [] });
+        if (!groups.has("untagged"))
+          groups.set("untagged", { label: text("Untagged", "未标记"), machines: [] });
         groups.get("untagged")!.machines.push(m);
       } else {
         tags.forEach((tag) => {
@@ -171,7 +177,7 @@ function getOsLabel(os: string): string {
     linux: "Linux",
     windows: "Windows",
     macos: "macOS",
-    unknown: "未知",
+    unknown: text("Unknown", "未知"),
   };
   return labels[os] || os;
 }
@@ -194,13 +200,13 @@ function getStatusTitle(machineId: string): string {
   const status = machineStatus.value[machineId] || "unknown";
   switch (status) {
     case "online":
-      return "在线";
+      return text("Online", "在线");
     case "offline":
-      return "离线";
+      return text("Offline", "离线");
     case "testing":
-      return "测试中...";
+      return text("Testing...", "测试中...");
     default:
-      return "未知状态";
+      return text("Unknown status", "未知状态");
   }
 }
 
@@ -400,10 +406,10 @@ function formatLastUpdated(dateStr: string): string {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffMins < 1) return "刚刚";
-  if (diffMins < 60) return `${diffMins} 分钟前`;
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  if (diffDays < 7) return `${diffDays} 天前`;
+  if (diffMins < 1) return text("Just now", "刚刚");
+  if (diffMins < 60) return text(`${diffMins} min ago`, `${diffMins} 分钟前`);
+  if (diffHours < 24) return text(`${diffHours} hr ago`, `${diffHours} 小时前`);
+  if (diffDays < 7) return text(`${diffDays} days ago`, `${diffDays} 天前`);
   return date.toLocaleDateString("zh-CN");
 }
 
@@ -437,7 +443,7 @@ function handleKeydown(e: KeyboardEvent) {
       showAddModal.value = true;
     } else if (e.key === "f") {
       e.preventDefault();
-      const searchInput = document.querySelector('input[placeholder*="搜索"]') as HTMLInputElement;
+      const searchInput = document.querySelector("input[data-machine-search]") as HTMLInputElement;
       if (searchInput) searchInput.focus();
     } else if (e.key === "a" && isSelectionMode.value) {
       e.preventDefault();
@@ -492,7 +498,7 @@ onUnmounted(() => {
         <nav class="flex-1 px-3 py-4 space-y-1">
           <a href="#" class="mm-nav-item mm-nav-item-active">
             <span class="icon-[lucide--server] size-4"></span>
-            <span>机器</span>
+            <span>{{ text("Machines", "机器") }}</span>
             <span
               class="ml-auto text-[11px] font-semibold bg-white/20 dark:bg-white/10 px-2 py-0.5 rounded-full"
               >{{ machines.length }}</span
@@ -500,11 +506,11 @@ onUnmounted(() => {
           </a>
           <a href="#" class="mm-nav-item mm-nav-item-inactive">
             <span class="icon-[lucide--key-round] size-4"></span>
-            <span>密钥管理</span>
+            <span>{{ text("Key Manager", "密钥管理") }}</span>
           </a>
           <a href="#" class="mm-nav-item mm-nav-item-inactive">
             <span class="icon-[lucide--settings] size-4"></span>
-            <span>设置</span>
+            <span>{{ text("Settings", "设置") }}</span>
           </a>
         </nav>
 
@@ -523,9 +529,9 @@ onUnmounted(() => {
             style="-webkit-app-region: drag"
           >
             <span class="icon-[lucide--server] size-5 text-accent"></span>
-            全部机器
+            {{ text("All machines", "全部机器") }}
             <Badge v-if="selectedCount > 0" variant="secondary" class="text-xs px-2">
-              已选 {{ selectedCount }}
+              {{ text(`${selectedCount} selected`, `已选 ${selectedCount}`) }}
             </Badge>
           </h1>
 
@@ -536,7 +542,8 @@ onUnmounted(() => {
               ></span>
               <Input
                 v-model="searchQuery"
-                placeholder="搜索机器... (⌘F)"
+                data-machine-search
+                :placeholder="text('Search machines... (⌘F)', '搜索机器... (⌘F)')"
                 class="pl-9 w-48 h-9 app-input"
               />
             </div>
@@ -555,10 +562,10 @@ onUnmounted(() => {
                     ]"
                     @click="filterMode = 'all'"
                   >
-                    全部
+                    {{ text("All", "全部") }}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>显示全部机器</TooltipContent>
+                <TooltipContent>{{ text("Show all machines", "显示全部机器") }}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger as-child>
@@ -571,10 +578,12 @@ onUnmounted(() => {
                     ]"
                     @click="filterMode = 'online'"
                   >
-                    在线
+                    {{ text("Online", "在线") }}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>仅显示在线机器</TooltipContent>
+                <TooltipContent>{{
+                  text("Show online machines only", "仅显示在线机器")
+                }}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger as-child>
@@ -587,10 +596,12 @@ onUnmounted(() => {
                     ]"
                     @click="filterMode = 'offline'"
                   >
-                    离线
+                    {{ text("Offline", "离线") }}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>仅显示离线机器</TooltipContent>
+                <TooltipContent>{{
+                  text("Show offline machines only", "仅显示离线机器")
+                }}</TooltipContent>
               </Tooltip>
             </div>
 
@@ -607,7 +618,11 @@ onUnmounted(() => {
                   <span class="icon-[lucide--list-checks] size-4"></span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ isSelectionMode ? "退出选择模式" : "批量选择" }}</TooltipContent>
+              <TooltipContent>{{
+                isSelectionMode
+                  ? text("Exit selection mode", "退出选择模式")
+                  : text("Select multiple", "批量选择")
+              }}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -624,7 +639,7 @@ onUnmounted(() => {
                   ></span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>测试所有连接</TooltipContent>
+              <TooltipContent>{{ text("Test all connections", "测试所有连接") }}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -636,12 +651,12 @@ onUnmounted(() => {
                   ></span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>刷新列表</TooltipContent>
+              <TooltipContent>{{ text("Refresh list", "刷新列表") }}</TooltipContent>
             </Tooltip>
 
             <Button size="sm" class="app-btn app-btn-primary" @click="showAddModal = true">
               <span class="icon-[lucide--plus] size-4"></span>
-              添加机器
+              {{ text("Add machine", "添加机器") }}
             </Button>
           </div>
         </header>
@@ -651,17 +666,19 @@ onUnmounted(() => {
           class="mx-6 mt-3 p-3 bg-elevated border border-accent/30 rounded-xl flex justify-between items-center"
         >
           <div class="flex items-center gap-3">
-            <span class="text-sm text-secondary">已选择 {{ selectedCount }} 台机器</span>
+            <span class="text-sm text-secondary">{{
+              text(`${selectedCount} machines selected`, `已选择 ${selectedCount} 台机器`)
+            }}</span>
             <Button
               variant="ghost"
               size="sm"
               class="text-xs px-2"
               @click="filteredMachines.forEach((m) => selectedMachines.add(m.id))"
             >
-              全选当前
+              {{ text("Select current", "全选当前") }}
             </Button>
             <Button variant="ghost" size="sm" class="text-xs px-2" @click="clearSelection">
-              清除选择
+              {{ text("Clear selection", "清除选择") }}
             </Button>
           </div>
           <div class="flex gap-2">
@@ -674,10 +691,12 @@ onUnmounted(() => {
                   :disabled="selectedCount === 0"
                 >
                   <span class="icon-[lucide--wifi] size-4"></span>
-                  测试连接
+                  {{ text("Test connections", "测试连接") }}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>测试选中机器的连接状态</TooltipContent>
+              <TooltipContent>{{
+                text("Test selected connections", "测试选中机器的连接状态")
+              }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -688,16 +707,18 @@ onUnmounted(() => {
                   :disabled="selectedCount === 0"
                 >
                   <span class="icon-[lucide--trash-2] size-4"></span>
-                  批量删除
+                  {{ text("Delete selected", "批量删除") }}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>删除选中的机器</TooltipContent>
+              <TooltipContent>{{
+                text("Delete selected machines", "删除选中的机器")
+              }}</TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         <div class="px-6 py-3 flex items-center gap-3">
-          <span class="text-xs text-tertiary">分组方式：</span>
+          <span class="text-xs text-tertiary">{{ text("Group by:", "分组方式：") }}</span>
           <div class="flex gap-1.5">
             <Button
               variant="ghost"
@@ -705,7 +726,7 @@ onUnmounted(() => {
               :class="['px-3 h-7 text-xs', groupMode === 'none' && 'bg-accent/30 text-accent']"
               @click="groupMode = 'none'"
             >
-              无分组
+              {{ text("None", "无分组") }}
             </Button>
             <Button
               variant="ghost"
@@ -713,7 +734,7 @@ onUnmounted(() => {
               :class="['px-3 h-7 text-xs', groupMode === 'os' && 'bg-accent/30 text-accent']"
               @click="groupMode = 'os'"
             >
-              按系统
+              {{ text("System", "按系统") }}
             </Button>
             <Button
               variant="ghost"
@@ -721,7 +742,7 @@ onUnmounted(() => {
               :class="['px-3 h-7 text-xs', groupMode === 'tag' && 'bg-accent/30 text-accent']"
               @click="groupMode = 'tag'"
             >
-              按标签
+              {{ text("Tag", "按标签") }}
             </Button>
           </div>
         </div>
@@ -761,7 +782,7 @@ onUnmounted(() => {
           class="flex-1 flex flex-col items-center justify-center text-tertiary gap-3"
         >
           <span class="icon-[lucide--loader-2] size-8 animate-spin text-accent"></span>
-          <p class="text-sm">加载中...</p>
+          <p class="text-sm">{{ text("Loading...", "加载中...") }}</p>
         </div>
 
         <div
@@ -773,11 +794,15 @@ onUnmounted(() => {
           >
             <span class="icon-[lucide--server-off] size-10 text-tertiary"></span>
           </div>
-          <h3 class="text-base font-semibold text-primary mb-2">暂无机器</h3>
-          <p class="text-sm mb-5 text-secondary">添加您的第一台服务器开始连接</p>
+          <h3 class="text-base font-semibold text-primary mb-2">
+            {{ text("No machines yet", "暂无机器") }}
+          </h3>
+          <p class="text-sm mb-5 text-secondary">
+            {{ text("Add your first server to get connected", "添加您的第一台服务器开始连接") }}
+          </p>
           <Button class="app-btn app-btn-primary" @click="showAddModal = true">
             <span class="icon-[lucide--plus] size-4"></span>
-            添加机器
+            {{ text("Add machine", "添加机器") }}
           </Button>
         </div>
 
@@ -788,8 +813,12 @@ onUnmounted(() => {
           <div class="size-20 rounded-2xl bg-active grid place-items-center mb-5">
             <span class="icon-[lucide--search-x] size-10"></span>
           </div>
-          <h3 class="text-base font-semibold text-primary mb-2">未找到匹配的机器</h3>
-          <p class="text-sm text-secondary">尝试其他关键词或筛选条件</p>
+          <h3 class="text-base font-semibold text-primary mb-2">
+            {{ text("No matching machines", "未找到匹配的机器") }}
+          </h3>
+          <p class="text-sm text-secondary">
+            {{ text("Try another keyword or filter", "尝试其他关键词或筛选条件") }}
+          </p>
         </div>
 
         <div v-else class="flex-1 overflow-y-auto p-6 space-y-6">
@@ -805,7 +834,7 @@ onUnmounted(() => {
                 class="ml-auto text-xs px-2 h-6"
                 @click="selectAllInGroup(group.machines)"
               >
-                全选
+                {{ text("Select all", "全选") }}
               </Button>
             </div>
 
@@ -873,7 +902,7 @@ onUnmounted(() => {
                           <span class="icon-[lucide--wifi] size-3.5"></span>
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>测试连接</TooltipContent>
+                      <TooltipContent>{{ text("Test connection", "测试连接") }}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger as-child>
@@ -886,7 +915,7 @@ onUnmounted(() => {
                           <span class="icon-[lucide--pencil] size-3.5"></span>
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>编辑</TooltipContent>
+                      <TooltipContent>{{ text("Edit", "编辑") }}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger as-child>
@@ -899,7 +928,7 @@ onUnmounted(() => {
                           <span class="icon-[lucide--trash-2] size-3.5"></span>
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>删除</TooltipContent>
+                      <TooltipContent>{{ text("Delete", "删除") }}</TooltipContent>
                     </Tooltip>
                   </div>
                 </div>
@@ -953,7 +982,11 @@ onUnmounted(() => {
                       class="icon-[lucide--loader-2] size-3.5 animate-spin"
                     ></span>
                     <span v-else class="icon-[lucide--terminal] size-3.5"></span>
-                    {{ isConnecting === machine.id ? "连接中..." : "连接" }}
+                    {{
+                      isConnecting === machine.id
+                        ? text("Connecting...", "连接中...")
+                        : text("Connect", "连接")
+                    }}
                   </button>
                 </div>
               </div>
@@ -967,38 +1000,50 @@ onUnmounted(() => {
           class="sm:max-w-md bg-surface border border-subtle rounded-xl shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
         >
           <DialogHeader>
-            <DialogTitle class="text-primary">添加机器</DialogTitle>
-            <DialogDescription class="text-secondary">填写 SSH 连接信息</DialogDescription>
+            <DialogTitle class="text-primary">{{ text("Add machine", "添加机器") }}</DialogTitle>
+            <DialogDescription class="text-secondary">{{
+              text("Enter the SSH connection details", "填写 SSH 连接信息")
+            }}</DialogDescription>
           </DialogHeader>
 
           <div class="space-y-4 py-4">
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">名称</label>
-              <Input v-model="newMachine.name" placeholder="例如：生产服务器" class="app-input" />
+              <label class="text-sm font-medium text-secondary">{{ text("Name", "名称") }}</label>
+              <Input
+                v-model="newMachine.name"
+                :placeholder="text('e.g. Production server', '例如：生产服务器')"
+                class="app-input"
+              />
             </div>
 
             <div class="flex gap-3">
               <div class="flex-1 space-y-1.5">
                 <label class="text-sm font-medium text-secondary"
-                  >主机地址 <span class="text-danger">*</span></label
+                  >{{ text("Host", "主机地址") }} <span class="text-danger">*</span></label
                 >
-                <Input v-model="newMachine.host" placeholder="IP 或域名" class="app-input" />
+                <Input
+                  v-model="newMachine.host"
+                  :placeholder="text('IP address or domain', 'IP 或域名')"
+                  class="app-input"
+                />
               </div>
               <div class="w-24 space-y-1.5">
-                <label class="text-sm font-medium text-secondary">端口</label>
+                <label class="text-sm font-medium text-secondary">{{ text("Port", "端口") }}</label>
                 <Input v-model.number="newMachine.port" type="number" class="app-input" />
               </div>
             </div>
 
             <div class="space-y-1.5">
               <label class="text-sm font-medium text-secondary"
-                >用户名 <span class="text-danger">*</span></label
+                >{{ text("Username", "用户名") }} <span class="text-danger">*</span></label
               >
               <Input v-model="newMachine.username" placeholder="root" class="app-input" />
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">认证方式</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Authentication", "认证方式")
+              }}</label>
               <div class="flex gap-2">
                 <Button
                   :variant="newMachine.authType === 'password' ? 'default' : 'outline'"
@@ -1008,29 +1053,33 @@ onUnmounted(() => {
                     newMachine.authType === 'password' && 'app-btn-primary',
                   ]"
                   @click="newMachine.authType = 'password'"
-                  >密码</Button
+                  >{{ text("Password", "密码") }}</Button
                 >
                 <Button
                   :variant="newMachine.authType === 'key' ? 'default' : 'outline'"
                   size="sm"
                   :class="['flex-1 app-btn', newMachine.authType === 'key' && 'app-btn-primary']"
                   @click="newMachine.authType = 'key'"
-                  >密钥</Button
+                  >{{ text("Key", "密钥") }}</Button
                 >
               </div>
             </div>
 
             <div v-if="newMachine.authType === 'password'" class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">密码</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Password", "密码")
+              }}</label>
               <Input
                 v-model="newMachine.password"
                 type="password"
-                placeholder="SSH 密码"
+                :placeholder="text('SSH password', 'SSH 密码')"
                 class="app-input"
               />
             </div>
             <div v-else class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">私钥路径</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Private key path", "私钥路径")
+              }}</label>
               <Input
                 v-model="newMachine.privateKeyPath"
                 placeholder="~/.ssh/id_rsa"
@@ -1039,7 +1088,9 @@ onUnmounted(() => {
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">操作系统</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Operating system", "操作系统")
+              }}</label>
               <div class="flex gap-2">
                 <Button
                   :variant="newMachine.os === 'linux' ? 'default' : 'outline'"
@@ -1074,13 +1125,13 @@ onUnmounted(() => {
                 showAddModal = false;
                 resetForm();
               "
-              >取消</Button
+              >{{ text("Cancel", "取消") }}</Button
             >
             <Button
               class="app-btn app-btn-primary"
               @click="handleAddMachine"
               :disabled="!newMachine.host || !newMachine.username"
-              >添加</Button
+              >{{ text("Add", "添加") }}</Button
             >
           </DialogFooter>
         </DialogContent>
@@ -1092,30 +1143,36 @@ onUnmounted(() => {
           class="sm:max-w-md bg-surface border border-subtle rounded-xl shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
         >
           <DialogHeader>
-            <DialogTitle class="text-primary">编辑机器</DialogTitle>
+            <DialogTitle class="text-primary">{{ text("Edit machine", "编辑机器") }}</DialogTitle>
           </DialogHeader>
 
           <div class="space-y-4 py-4">
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">名称</label>
+              <label class="text-sm font-medium text-secondary">{{ text("Name", "名称") }}</label>
               <Input v-model="editingMachine.name" class="app-input" />
             </div>
             <div class="flex gap-3">
               <div class="flex-1 space-y-1.5">
-                <label class="text-sm font-medium text-secondary">主机地址</label>
+                <label class="text-sm font-medium text-secondary">{{
+                  text("Host", "主机地址")
+                }}</label>
                 <Input v-model="editingMachine.host" class="app-input" />
               </div>
               <div class="w-24 space-y-1.5">
-                <label class="text-sm font-medium text-secondary">端口</label>
+                <label class="text-sm font-medium text-secondary">{{ text("Port", "端口") }}</label>
                 <Input v-model.number="editingMachine.port" type="number" class="app-input" />
               </div>
             </div>
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">用户名</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Username", "用户名")
+              }}</label>
               <Input v-model="editingMachine.username" class="app-input" />
             </div>
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">认证方式</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Authentication", "认证方式")
+              }}</label>
               <div class="flex gap-2">
                 <Button
                   :variant="editingMachine.authType === 'password' ? 'default' : 'outline'"
@@ -1125,7 +1182,7 @@ onUnmounted(() => {
                     editingMachine.authType === 'password' && 'app-btn-primary',
                   ]"
                   @click="editingMachine.authType = 'password'"
-                  >密码</Button
+                  >{{ text("Password", "密码") }}</Button
                 >
                 <Button
                   :variant="editingMachine.authType === 'key' ? 'default' : 'outline'"
@@ -1135,21 +1192,25 @@ onUnmounted(() => {
                     editingMachine.authType === 'key' && 'app-btn-primary',
                   ]"
                   @click="editingMachine.authType = 'key'"
-                  >密钥</Button
+                  >{{ text("Key", "密钥") }}</Button
                 >
               </div>
             </div>
             <div v-if="editingMachine.authType === 'password'" class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">密码</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Password", "密码")
+              }}</label>
               <Input
                 v-model="editingMachine.password"
                 type="password"
-                placeholder="留空保持不变"
+                :placeholder="text('Leave blank to keep unchanged', '留空保持不变')"
                 class="app-input"
               />
             </div>
             <div v-else class="space-y-1.5">
-              <label class="text-sm font-medium text-secondary">私钥路径</label>
+              <label class="text-sm font-medium text-secondary">{{
+                text("Private key path", "私钥路径")
+              }}</label>
               <Input v-model="editingMachine.privateKeyPath" class="app-input" />
             </div>
           </div>
@@ -1159,9 +1220,11 @@ onUnmounted(() => {
               variant="outline"
               class="app-btn app-btn-secondary"
               @click="showEditModal = false"
-              >取消</Button
+              >{{ text("Cancel", "取消") }}</Button
             >
-            <Button class="app-btn app-btn-primary" @click="handleUpdateMachine">保存</Button>
+            <Button class="app-btn app-btn-primary" @click="handleUpdateMachine">{{
+              text("Save", "保存")
+            }}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1175,13 +1238,15 @@ onUnmounted(() => {
             <div class="size-14 rounded-full bg-danger/15 grid place-items-center mx-auto mb-3">
               <span class="icon-[lucide--trash-2] size-7 text-danger"></span>
             </div>
-            <DialogTitle class="text-primary">确认删除</DialogTitle>
+            <DialogTitle class="text-primary">{{
+              text("Confirm deletion", "确认删除")
+            }}</DialogTitle>
             <DialogDescription class="text-secondary">
-              确定删除
+              {{ text("Delete", "确定删除") }}
               <strong class="text-primary">{{
                 deletingMachine.name || deletingMachine.host
               }}</strong
-              >？此操作不可恢复。
+              >{{ text("? This action cannot be undone.", "？此操作不可恢复。") }}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter class="sm:justify-center gap-3">
@@ -1189,9 +1254,11 @@ onUnmounted(() => {
               variant="outline"
               class="app-btn app-btn-secondary"
               @click="showDeleteConfirm = false"
-              >取消</Button
+              >{{ text("Cancel", "取消") }}</Button
             >
-            <Button variant="destructive" class="app-btn" @click="handleDeleteMachine">删除</Button>
+            <Button variant="destructive" class="app-btn" @click="handleDeleteMachine">{{
+              text("Delete", "删除")
+            }}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1204,10 +1271,15 @@ onUnmounted(() => {
             <div class="size-14 rounded-full bg-danger/15 grid place-items-center mx-auto mb-3">
               <span class="icon-[lucide--trash-2] size-7 text-danger"></span>
             </div>
-            <DialogTitle class="text-primary">批量删除确认</DialogTitle>
+            <DialogTitle class="text-primary">{{
+              text("Confirm bulk deletion", "批量删除确认")
+            }}</DialogTitle>
             <DialogDescription class="text-secondary">
-              确定删除选中的
-              <strong class="text-danger">{{ selectedCount }}</strong> 台机器？此操作不可恢复。
+              {{ text("Delete the", "确定删除选中的") }}
+              <strong class="text-danger">{{ selectedCount }}</strong>
+              {{
+                text("selected machines? This action cannot be undone.", "台机器？此操作不可恢复。")
+              }}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter class="sm:justify-center gap-3">
@@ -1215,9 +1287,11 @@ onUnmounted(() => {
               variant="outline"
               class="app-btn app-btn-secondary"
               @click="showBatchDeleteConfirm = false"
-              >取消</Button
+              >{{ text("Cancel", "取消") }}</Button
             >
-            <Button variant="destructive" class="app-btn" @click="handleBatchDelete">删除</Button>
+            <Button variant="destructive" class="app-btn" @click="handleBatchDelete">{{
+              text("Delete", "删除")
+            }}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -7,9 +7,11 @@
 import { ref, computed, watch } from "vue";
 import { useColorMode, useLocalStorage } from "@vueuse/core";
 import { useAppearance } from "@/composables/useAppearance";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 import { Slider } from "@/components/ui/slider";
 
 const { dockIconSize } = useAppearance();
+const { text } = useInterfaceLanguage();
 
 const dockIconSizeArray = computed({
   get: () => [dockIconSize.value],
@@ -47,39 +49,43 @@ const theme = computed({
 
 // 强调色选项
 const accentColors = [
-  { value: "#0a84ff", name: "蓝色" },
-  { value: "#8b5cf6", name: "紫色" },
-  { value: "#ec4899", name: "粉色" },
-  { value: "#ef4444", name: "红色" },
-  { value: "#f97316", name: "橙色" },
-  { value: "#22c55e", name: "绿色" },
-  { value: "#06b6d4", name: "青色" },
-  { value: "#64748b", name: "灰色" },
+  { value: "#0a84ff", nameEn: "Blue", nameZh: "蓝色" },
+  { value: "#8b5cf6", nameEn: "Purple", nameZh: "紫色" },
+  { value: "#ec4899", nameEn: "Pink", nameZh: "粉色" },
+  { value: "#ef4444", nameEn: "Red", nameZh: "红色" },
+  { value: "#f97316", nameEn: "Orange", nameZh: "橙色" },
+  { value: "#22c55e", nameEn: "Green", nameZh: "绿色" },
+  { value: "#06b6d4", nameEn: "Cyan", nameZh: "青色" },
+  { value: "#64748b", nameEn: "Gray", nameZh: "灰色" },
 ];
 
 // 预设壁纸选项
 const presetWallpapers = [
   {
     id: 0,
-    name: "默认渐变",
+    nameEn: "Default Gradient",
+    nameZh: "默认渐变",
     preview: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
     type: "gradient",
   },
   {
     id: 1,
-    name: "深空蓝",
+    nameEn: "Deep Space Blue",
+    nameZh: "深空蓝",
     preview: "linear-gradient(135deg, #0c1445 0%, #1a237e 100%)",
     type: "gradient",
   },
   {
     id: 2,
-    name: "暗夜紫",
+    nameEn: "Midnight Purple",
+    nameZh: "暗夜紫",
     preview: "linear-gradient(135deg, #1a0533 0%, #4a1259 100%)",
     type: "gradient",
   },
   {
     id: 3,
-    name: "极光绿",
+    nameEn: "Aurora Green",
+    nameZh: "极光绿",
     preview: "linear-gradient(135deg, #0d2818 0%, #1b4332 100%)",
     type: "gradient",
   },
@@ -89,12 +95,18 @@ const presetWallpapers = [
 const allWallpapers = computed(() => {
   const custom = customWallpapers.value.map((url, index) => ({
     id: 100 + index,
-    name: `自定义 ${index + 1}`,
+    name: text(`Custom ${index + 1}`, `自定义 ${index + 1}`),
     preview: `url(${url})`,
     type: "image" as const,
     url,
   }));
-  return [...presetWallpapers, ...custom];
+  return [
+    ...presetWallpapers.map((wallpaper) => ({
+      ...wallpaper,
+      name: text(wallpaper.nameEn, wallpaper.nameZh),
+    })),
+    ...custom,
+  ];
 });
 
 // 壁纸拖拽上传
@@ -199,7 +211,9 @@ watch(
     <!-- 主题模式 -->
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">主题模式</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Theme Mode", "主题模式")
+        }}</span>
       </div>
       <div
         class="grid grid-cols-3 gap-4 bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
@@ -208,19 +222,19 @@ watch(
           v-for="option in [
             {
               value: 'light',
-              label: '浅色',
+              label: text('Light', '浅色'),
               icon: 'icon-[lucide--sun]',
               bg: 'bg-gradient-to-br from-white to-gray-200',
             },
             {
               value: 'dark',
-              label: '深色',
+              label: text('Dark', '深色'),
               icon: 'icon-[lucide--moon]',
               bg: 'bg-gradient-to-br from-gray-800 to-black',
             },
             {
               value: 'auto',
-              label: '自动',
+              label: text('Auto', '自动'),
               icon: 'icon-[lucide--monitor]',
               bg: 'bg-gradient-to-br from-gray-200 to-gray-800',
             },
@@ -251,7 +265,9 @@ watch(
     <!-- 强调色 -->
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">强调色</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Accent Color", "强调色")
+        }}</span>
       </div>
       <div
         class="flex flex-wrap gap-4 p-4 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
@@ -263,7 +279,7 @@ watch(
           :style="{
             backgroundColor: color.value,
           }"
-          :title="color.name"
+          :title="text(color.nameEn, color.nameZh)"
           @click="applyAccentColor(color.value)"
         >
           <div
@@ -279,7 +295,9 @@ watch(
     <!-- 壁纸 -->
     <section>
       <div class="px-2 mb-2 flex items-center justify-between">
-        <span class="text-[12px] font-semibold text-tertiary">桌面壁纸</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Desktop Wallpaper", "桌面壁纸")
+        }}</span>
       </div>
 
       <div
@@ -303,8 +321,12 @@ watch(
           >
             <span class="icon-[lucide--upload-cloud] size-6"></span>
           </div>
-          <p class="text-sm font-semibold mb-1">点击或拖拽上传</p>
-          <p class="text-xs text-tertiary">支持主流图像格式 (Max 5MB)</p>
+          <p class="text-sm font-semibold mb-1">
+            {{ text("Click or drag to upload", "点击或拖拽上传") }}
+          </p>
+          <p class="text-xs text-tertiary">
+            {{ text("Common image formats supported (Max 5 MB)", "支持主流图像格式（最大 5 MB）") }}
+          </p>
           <input
             ref="fileInput"
             type="file"
@@ -371,7 +393,7 @@ watch(
     <!-- Dock -->
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">Dock 栏</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{ text("Dock", "Dock 栏") }}</span>
       </div>
       <div
         class="flex items-center gap-6 bg-white dark:bg-white/5 p-4 rounded-xl border border-black/5 dark:border-white/5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
@@ -387,8 +409,15 @@ watch(
           ></span>
         </div>
         <div class="flex-1 space-y-1">
-          <span class="text-sm font-semibold">图标尺寸</span>
-          <p class="text-xs text-tertiary">滑动调整下方快捷栏应用图标的基础显示大小</p>
+          <span class="text-sm font-semibold">{{ text("Icon size", "图标尺寸") }}</span>
+          <p class="text-xs text-tertiary">
+            {{
+              text(
+                "Adjust the base size of application icons in the Dock",
+                "滑动调整下方快捷栏应用图标的基础显示大小",
+              )
+            }}
+          </p>
         </div>
 
         <div class="flex items-center gap-4 w-[240px]">

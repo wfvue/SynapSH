@@ -33,6 +33,13 @@ export interface ElectronAPI {
   getSetting: (key: string, defaultValue?: any) => Promise<any>;
   setSetting: (key: string, value: any) => Promise<void>;
 
+  // AI assistant
+  chatWithAI: (
+    messages: AIMessage[],
+    serverContext?: string,
+    conversationId?: string,
+  ) => Promise<AIChatResponse>;
+
   // 数据库管理
   detectDatabases: (sessionId: string) => Promise<DatabaseDetectionResult[]>;
   installDatabase: (params: InstallDatabaseParams) => Promise<string>;
@@ -73,6 +80,16 @@ interface TestConnectionParams {
   username: string;
   password?: string;
   privateKey?: string;
+}
+
+interface AIMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface AIChatResponse {
+  text: string;
+  model: string;
 }
 
 interface FileListResult {
@@ -306,6 +323,10 @@ const electronAPI: ElectronAPI = {
   deleteMachine: (id) => ipcRenderer.invoke("db:delete-machine", id),
   getSetting: (key, defaultValue) => ipcRenderer.invoke("db:get-setting", key, defaultValue),
   setSetting: (key, value) => ipcRenderer.invoke("db:set-setting", key, value),
+
+  // AI assistant
+  chatWithAI: (messages, serverContext, conversationId) =>
+    ipcRenderer.invoke("ai:chat", messages, serverContext, conversationId),
 
   // 数据库管理
   detectDatabases: (sessionId) => ipcRenderer.invoke("db:detect-databases", sessionId),

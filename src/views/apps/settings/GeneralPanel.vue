@@ -5,26 +5,44 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
 import { Switch } from "@/components/ui/switch";
+import { useInterfaceLanguage, type InterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 // 通用设置项
 const autoConnect = ref(true);
 const showWelcome = ref(true);
-const language = ref("zh-CN");
 const defaultShell = ref("bash");
+const settingsLoaded = ref(false);
+const { language, text } = useInterfaceLanguage();
 
 // 从数据库加载设置
 onMounted(async () => {
   autoConnect.value = await window.electronAPI.getSetting("general:autoConnect", true);
   showWelcome.value = await window.electronAPI.getSetting("general:showWelcome", true);
-  language.value = await window.electronAPI.getSetting("general:language", "zh-CN");
+  language.value = await window.electronAPI.getSetting<InterfaceLanguage>(
+    "general:language",
+    language.value,
+  );
   defaultShell.value = await window.electronAPI.getSetting("general:defaultShell", "bash");
+  settingsLoaded.value = true;
 });
 
 // 监听变动并保存
-watch(autoConnect, (val) => window.electronAPI.setSetting("general:autoConnect", val));
-watch(showWelcome, (val) => window.electronAPI.setSetting("general:showWelcome", val));
-watch(language, (val) => window.electronAPI.setSetting("general:language", val));
-watch(defaultShell, (val) => window.electronAPI.setSetting("general:defaultShell", val));
+watch(
+  autoConnect,
+  (val) => settingsLoaded.value && window.electronAPI.setSetting("general:autoConnect", val),
+);
+watch(
+  showWelcome,
+  (val) => settingsLoaded.value && window.electronAPI.setSetting("general:showWelcome", val),
+);
+watch(
+  language,
+  (val) => settingsLoaded.value && window.electronAPI.setSetting("general:language", val),
+);
+watch(
+  defaultShell,
+  (val) => settingsLoaded.value && window.electronAPI.setSetting("general:defaultShell", val),
+);
 
 const languages = [
   { value: "zh-CN", label: "简体中文" },
@@ -43,7 +61,9 @@ const shells = [
     <!-- 启动部分 -->
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">启动行为</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Startup", "启动行为")
+        }}</span>
       </div>
 
       <div
@@ -53,8 +73,15 @@ const shells = [
           class="flex items-center justify-between p-3.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
         >
           <div class="flex flex-col gap-0.5">
-            <span class="text-[13px] font-medium text-primary">启动时自动连接</span>
-            <span class="text-[11px] text-tertiary">同步应用开启后自动恢复上次的 SSH 会话</span>
+            <span class="text-[13px] font-medium text-primary">{{
+              text("Connect automatically", "启动时自动连接")
+            }}</span>
+            <span class="text-[11px] text-tertiary">{{
+              text(
+                "Restore the previous SSH session when SynapSH starts",
+                "应用开启后自动恢复上次的 SSH 会话",
+              )
+            }}</span>
           </div>
           <Switch v-model:checked="autoConnect" />
         </div>
@@ -63,8 +90,12 @@ const shells = [
           class="flex items-center justify-between p-3.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
         >
           <div class="flex flex-col gap-0.5">
-            <span class="text-[13px] font-medium text-primary">显示欢迎界面</span>
-            <span class="text-[11px] text-tertiary">启动时展示快速上手指南</span>
+            <span class="text-[13px] font-medium text-primary">{{
+              text("Show welcome screen", "显示欢迎界面")
+            }}</span>
+            <span class="text-[11px] text-tertiary">{{
+              text("Show the quick-start guide at launch", "启动时展示快速上手指南")
+            }}</span>
           </div>
           <Switch v-model:checked="showWelcome" />
         </div>
@@ -74,12 +105,16 @@ const shells = [
     <!-- 语言部分 -->
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">语言与区域</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Language & Region", "语言与区域")
+        }}</span>
       </div>
       <div
         class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-3.5 px-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
       >
-        <span class="text-[13px] font-medium text-primary">界面语言</span>
+        <span class="text-[13px] font-medium text-primary">{{
+          text("Interface language", "界面语言")
+        }}</span>
         <div class="relative group">
           <select
             v-model="language"
@@ -104,14 +139,20 @@ const shells = [
     <!-- 默认设置部分 -->
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">终端默认设置</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Terminal Defaults", "终端默认设置")
+        }}</span>
       </div>
       <div
         class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-3.5 px-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
       >
         <div class="flex flex-col gap-0.5">
-          <span class="text-[13px] font-medium text-primary">默认 Shell</span>
-          <span class="text-[11px] text-tertiary">创建新终端连接时默认使用的 Shell 环境</span>
+          <span class="text-[13px] font-medium text-primary">{{
+            text("Default shell", "默认 Shell")
+          }}</span>
+          <span class="text-[11px] text-tertiary">{{
+            text("Shell used for new terminal connections", "创建新终端连接时默认使用的 Shell 环境")
+          }}</span>
         </div>
         <div class="relative group">
           <select

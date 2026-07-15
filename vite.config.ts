@@ -40,7 +40,7 @@ export default defineConfig(() => ({
               fileName: () => "[name].mjs",
             },
             rolldownOptions: {
-              external: ["better-sqlite3", "ssh2"],
+              external: ["better-sqlite3", "ssh2", "@openai/codex-sdk", "@openai/codex"],
             },
           },
         },

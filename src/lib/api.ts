@@ -34,6 +34,15 @@ export interface ElectronAPI {
   addMachine: (input: MachineInput) => Promise<Machine>;
   updateMachine: (id: string, input: MachineInput) => Promise<Machine>;
   deleteMachine: (id: string) => Promise<void>;
+  getSetting: <T>(key: string, defaultValue?: T) => Promise<T>;
+  setSetting: (key: string, value: unknown) => Promise<void>;
+
+  // AI assistant
+  chatWithAI: (
+    messages: AIMessage[],
+    serverContext?: string,
+    conversationId?: string,
+  ) => Promise<AIChatResponse>;
 
   // 数据库管理
   detectDatabases: (sessionId: string) => Promise<DatabaseDetectionResult[]>;
@@ -273,6 +282,16 @@ export interface BrowserProxyError {
   message: string;
 }
 
+export interface AIMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AIChatResponse {
+  text: string;
+  model: string;
+}
+
 // 获取 API 实例
 function getAPI(): ElectronAPI {
   if (typeof window !== "undefined" && window.electronAPI) {
@@ -318,6 +337,10 @@ export const api = {
   addMachine: (input: MachineInput) => getAPI().addMachine(input),
   updateMachine: (id: string, input: MachineInput) => getAPI().updateMachine(id, input),
   deleteMachine: (id: string) => getAPI().deleteMachine(id),
+
+  // AI assistant
+  chatWithAI: (messages: AIMessage[], serverContext?: string, conversationId?: string) =>
+    getAPI().chatWithAI(messages, serverContext, conversationId),
 
   // 数据库管理
   detectDatabases: (sessionId: string) => getAPI().detectDatabases(sessionId),

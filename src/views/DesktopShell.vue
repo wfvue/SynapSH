@@ -14,6 +14,8 @@ import TextEditorApp from "./apps/TextEditorApp.vue";
 import SettingsApp from "./apps/SettingsApp.vue";
 import TerminalApp from "./apps/TerminalApp.vue";
 import DatabaseManagerApp from "./apps/DatabaseManagerApp.vue";
+import AIAssistantApp from "./apps/AIAssistantApp.vue";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 type AppId =
   | "terminal"
@@ -23,7 +25,8 @@ type AppId =
   | "app-center"
   | "browser"
   | "editor"
-  | "database";
+  | "database"
+  | "ai";
 
 const props = defineProps<{
   initialSession?: string;
@@ -31,132 +34,148 @@ const props = defineProps<{
 
 const isConnected = ref(true);
 const browserError = ref("");
+const { text } = useInterfaceLanguage();
 const sessionId = computed(() => {
   return props.initialSession || "default-session";
 });
 
 // 桌面图标配置 - macOS 风格图标
-const desktopItems: DesktopIconItem[] = [
+const desktopItems = computed<DesktopIconItem[]>(() => [
   {
     id: "computer",
-    label: "此电脑",
+    label: text("This Computer", "此电脑"),
     icon: "icon-[mdi--laptop]",
     color: "linear-gradient(135deg, #5e6ad2 0%, #3b82f6 100%)",
     app: "files",
   },
   {
     id: "terminal",
-    label: "终端",
+    label: text("Terminal", "终端"),
     icon: "icon-[mdi--console]",
     color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)",
     app: "terminal",
   },
   {
     id: "files",
-    label: "访达",
+    label: text("Files", "访达"),
     icon: "icon-[mdi--folder]",
     color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)",
     app: "files",
   },
   {
     id: "database",
-    label: "数据库",
+    label: text("Databases", "数据库"),
     icon: "icon-[mdi--database]",
     color: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)",
     app: "database",
   },
   {
     id: "web",
-    label: "浏览器",
+    label: text("Browser", "浏览器"),
     icon: "icon-[mdi--compass]",
     color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)",
     app: "browser",
   },
   {
     id: "settings",
-    label: "系统设置",
+    label: text("Settings", "系统设置"),
     icon: "icon-[mdi--cog]",
     color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
     app: "settings",
   },
   {
     id: "tasks",
-    label: "活动监视器",
+    label: text("Activity Monitor", "活动监视器"),
     icon: "icon-[mdi--chart-line]",
     color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)",
     app: "monitor",
   },
   {
+    id: "ai",
+    label: text("AI Assistant", "AI 运维助手"),
+    icon: "icon-[lucide--sparkles]",
+    color: "linear-gradient(135deg, #8b5cf6 0%, #0a84ff 100%)",
+    app: "ai",
+  },
+  {
     id: "apps",
-    label: "应用中心",
+    label: text("App Center", "应用中心"),
     icon: "icon-[mdi--apps]",
     color: "linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)",
     app: "app-center",
   },
   {
     id: "trash",
-    label: "废纸篓",
+    label: text("Trash", "废纸篓"),
     icon: "icon-[mdi--delete]",
     color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
   },
-];
+]);
 
 // Dock 栏配置
-const dockItems: DockItem[] = [
+const dockItems = computed<DockItem[]>(() => [
   {
     id: "files",
-    label: "访达",
+    label: text("Files", "访达"),
     icon: "icon-[mdi--folder]",
     color: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)",
     app: "files",
   },
   {
     id: "terminal",
-    label: "终端",
+    label: text("Terminal", "终端"),
     icon: "icon-[mdi--console]",
     color: "linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%)",
     app: "terminal",
   },
   {
     id: "browser",
-    label: "浏览器",
+    label: text("Browser", "浏览器"),
     icon: "icon-[mdi--compass]",
     color: "linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)",
     app: "browser",
   },
   {
     id: "monitor",
-    label: "活动监视器",
+    label: text("Activity Monitor", "活动监视器"),
     icon: "icon-[mdi--chart-line]",
     color: "linear-gradient(135deg, #10b981 0%, #34d399 100%)",
     app: "monitor",
   },
   {
     id: "settings",
-    label: "系统设置",
+    label: text("Settings", "系统设置"),
     icon: "icon-[mdi--cog]",
     color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
     app: "settings",
   },
   {
+    id: "ai",
+    label: text("AI Assistant", "AI 运维助手"),
+    icon: "icon-[lucide--sparkles]",
+    color: "linear-gradient(135deg, #8b5cf6 0%, #0a84ff 100%)",
+    app: "ai",
+  },
+  {
     id: "trash",
-    label: "废纸篓",
+    label: text("Trash", "废纸篓"),
     icon: "icon-[mdi--delete]",
     color: "linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)",
   },
-];
+]);
 
 // 应用标题
-const appTitles: Record<AppId, string> = {
-  terminal: "终端",
-  files: "文件管理器",
-  monitor: "任务管理器",
-  settings: "设置",
-  "app-center": "应用中心",
-  browser: "浏览器",
-  editor: "文本编辑器",
-  database: "数据库管理",
-};
+const appTitles = computed<Record<AppId, string>>(() => ({
+  terminal: text("Terminal", "终端"),
+  files: text("File Manager", "文件管理器"),
+  monitor: text("Activity Monitor", "任务管理器"),
+  settings: text("Settings", "设置"),
+  "app-center": text("App Center", "应用中心"),
+  browser: text("Browser", "浏览器"),
+  editor: text("Text Editor", "文本编辑器"),
+  database: text("Database Manager", "数据库管理"),
+  ai: text("AI Operations Assistant", "AI 运维助手"),
+}));
 
 // 编辑器状态
 interface EditorFile {
@@ -197,7 +216,7 @@ async function openApp(id: string) {
       await api.browserOpen(sessionId.value, "https://www.google.com", { profileMode: "session" });
     } catch (error) {
       const message = formatInvokeError(error);
-      browserError.value = message || "打开 Chrome 失败";
+      browserError.value = message || text("Failed to open Chrome", "打开 Chrome 失败");
       console.error("打开 Chrome 失败:", error);
     }
     return;
@@ -338,10 +357,20 @@ onUnmounted(() => {
       <!-- 数据库管理 -->
       <DatabaseManagerApp v-else-if="app === 'database'" :session-id="sessionId" />
 
+      <!-- AI 运维助手 -->
+      <AIAssistantApp v-else-if="app === 'ai'" :session-id="sessionId" />
+
       <!-- 其他应用占位 -->
       <div v-else class="app-empty">
-        <h2>正在准备</h2>
-        <p>这个模块会作为系统级 App 扩展加入。</p>
+        <h2>{{ text("Coming soon", "正在准备") }}</h2>
+        <p>
+          {{
+            text(
+              "This module will be added as a system application.",
+              "这个模块会作为系统级 App 扩展加入。",
+            )
+          }}
+        </p>
       </div>
     </AppWindow>
 

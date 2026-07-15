@@ -9,6 +9,7 @@ import AppearancePanel from "./settings/AppearancePanel.vue";
 import TerminalPanel from "./settings/TerminalPanel.vue";
 import ConnectionPanel from "./settings/ConnectionPanel.vue";
 import AboutPanel from "./settings/AboutPanel.vue";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 defineProps<{
   sessionId: string;
@@ -22,62 +23,80 @@ type PanelId = "general" | "appearance" | "terminal" | "connection" | "about";
 
 const activePanel = ref<PanelId>("general");
 const searchQuery = ref("");
+const { text } = useInterfaceLanguage();
 
-const panels: { id: PanelId; label: string; icon: string; keywords: string[]; color: string }[] = [
+const panels = computed(() => [
   {
-    id: "general",
-    label: "通用",
+    id: "general" as const,
+    label: text("General", "通用"),
     icon: "icon-[lucide--settings-2]",
     color: "from-gray-400 to-gray-500",
     keywords: ["general", "startup", "language", "通用"],
   },
   {
-    id: "appearance",
-    label: "外观",
+    id: "appearance" as const,
+    label: text("Appearance", "外观"),
     icon: "icon-[lucide--palette]",
     color: "from-blue-400 to-blue-500",
     keywords: ["appearance", "theme", "color", "外观"],
   },
   {
-    id: "terminal",
-    label: "终端",
+    id: "terminal" as const,
+    label: text("Terminal", "终端"),
     icon: "icon-[lucide--terminal]",
     color: "from-slate-700 to-slate-800",
     keywords: ["terminal", "font", "终端"],
   },
   {
-    id: "connection",
-    label: "连接控制",
+    id: "connection" as const,
+    label: text("Connections", "连接控制"),
     icon: "icon-[lucide--link-2]",
     color: "from-green-400 to-green-500",
     keywords: ["connection", "ssh", "连接"],
   },
   {
-    id: "about",
-    label: "关于本体",
+    id: "about" as const,
+    label: text("About", "关于"),
     icon: "icon-[lucide--info]",
     color: "from-amber-400 to-amber-500",
     keywords: ["about", "version", "关于"],
   },
-];
+]);
 
-const currentPanel = computed(() => panels.find((p) => p.id === activePanel.value));
+const currentPanel = computed(() => panels.value.find((p) => p.id === activePanel.value));
 
 const getPanelDescription = (id: PanelId) => {
   const desc: Record<PanelId, string> = {
-    general: "管理 SynapSH 的基础运行模式、界面语言以及启动项配置。",
-    appearance: "通过调整主题、壁纸与强调色，个性化你的终端界面。",
-    terminal: "精细化配置终端字体、颜色方案以及光标行为。",
-    connection: "维护远程服务器的安全连接、代理设置与会话策略。",
-    about: "查看 SynapSH 的当前版本、更新记录以及相关信息。",
+    general: text(
+      "Manage SynapSH startup behavior, interface language, and defaults.",
+      "管理 SynapSH 的基础运行模式、界面语言以及启动项配置。",
+    ),
+    appearance: text(
+      "Personalize themes, wallpapers, accent colors, and Dock behavior.",
+      "通过调整主题、壁纸与强调色，个性化你的终端界面。",
+    ),
+    terminal: text(
+      "Configure terminal fonts, color schemes, and cursor behavior.",
+      "精细化配置终端字体、颜色方案以及光标行为。",
+    ),
+    connection: text(
+      "Manage secure connections, authentication, and session policies.",
+      "维护远程服务器的安全连接、代理设置与会话策略。",
+    ),
+    about: text(
+      "View the current SynapSH version, links, and project information.",
+      "查看 SynapSH 的当前版本、更新记录以及相关信息。",
+    ),
   };
   return desc[id] || "";
 };
 
 const filteredPanels = computed(() => {
-  if (!searchQuery.value) return panels;
+  if (!searchQuery.value) return panels.value;
   const query = searchQuery.value.toLowerCase();
-  return panels.filter((p) => p.label.includes(query) || p.keywords.some((k) => k.includes(query)));
+  return panels.value.filter(
+    (p) => p.label.toLowerCase().includes(query) || p.keywords.some((k) => k.includes(query)),
+  );
 });
 </script>
 
@@ -97,7 +116,7 @@ const filteredPanels = computed(() => {
           ></span>
           <input
             type="text"
-            placeholder="搜索"
+            :placeholder="text('Search settings', '搜索设置')"
             v-model="searchQuery"
             class="w-full h-7 bg-black/5 dark:bg-white/5 border-none rounded-full pl-8 pr-3 text-[11px] outline-none focus:ring-0 placeholder:text-tertiary/40"
           />
@@ -116,7 +135,9 @@ const filteredPanels = computed(() => {
           </div>
           <div class="flex flex-col min-w-0">
             <span class="text-[13px] font-semibold truncate">Admin</span>
-            <span class="text-[10px] text-tertiary">系统管理员</span>
+            <span class="text-[10px] text-tertiary">{{
+              text("System Administrator", "系统管理员")
+            }}</span>
           </div>
         </div>
       </div>
@@ -148,7 +169,9 @@ const filteredPanels = computed(() => {
             <span class="font-medium">{{ panel.label }}</span>
           </div>
         </template>
-        <div v-else class="px-4 py-8 text-center text-tertiary text-[10px]">未找到内容</div>
+        <div v-else class="px-4 py-8 text-center text-tertiary text-[10px]">
+          {{ text("No settings found", "未找到内容") }}
+        </div>
       </nav>
     </aside>
 

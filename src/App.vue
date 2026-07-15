@@ -6,8 +6,10 @@ import DesktopShell from "./views/DesktopShell.vue";
 import MachineManager from "./views/MachineManager.vue";
 import TabBar, { type Tab } from "./components/TabBar.vue";
 import { Toaster } from "@/components/ui/toast";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 const globalError = ref<string>("");
+const { language, text } = useInterfaceLanguage();
 
 onErrorCaptured((err) => {
   console.error("Global Error Captured:", err);
@@ -52,7 +54,7 @@ const MAIN_TAB_ID = "tab-main";
 function createManagerTab(): AppTab {
   return {
     id: MAIN_TAB_ID,
-    title: "机器管理",
+    title: text("Machines", "机器管理"),
     view: "machine-manager",
     kind: "manager",
     closable: false,
@@ -62,6 +64,11 @@ function createManagerTab(): AppTab {
 
 const tabs = ref<AppTab[]>([createManagerTab()]);
 const activeTabId = ref(MAIN_TAB_ID);
+
+watch(language, () => {
+  const managerTab = tabs.value.find((tab) => tab.id === MAIN_TAB_ID);
+  if (managerTab) managerTab.title = text("Machines", "机器管理");
+});
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value));
 
@@ -143,7 +150,7 @@ function resetToSafeState() {
 <template>
   <div class="app-container">
     <div v-if="globalError" class="global-error-overlay">
-      <h2 class="text-xl font-bold mb-4">应用崩溃</h2>
+      <h2 class="text-xl font-bold mb-4">{{ text("Application Error", "应用崩溃") }}</h2>
       <pre
         class="bg-black/50 p-4 rounded mb-4 overflow-auto max-h-[60vh] text-left whitespace-pre-wrap"
         >{{ globalError }}</pre
@@ -153,13 +160,13 @@ function resetToSafeState() {
           class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-white"
           @click="resetToSafeState"
         >
-          返回首页
+          {{ text("Return home", "返回首页") }}
         </button>
         <button
           class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700 text-white"
           @click="reloadApp"
         >
-          重新加载
+          {{ text("Reload", "重新加载") }}
         </button>
       </div>
     </div>

@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { Switch } from "@/components/ui/switch";
+import { useInterfaceLanguage } from "@/composables/useInterfaceLanguage";
 
 // 终端设置项
 const fontSize = ref(14);
@@ -13,6 +14,7 @@ const cursorStyle = ref<"block" | "underline" | "bar">("block");
 const cursorBlink = ref(true);
 const colorScheme = ref("dracula");
 const scrollback = ref(1000);
+const { text } = useInterfaceLanguage();
 
 const fonts = [
   { value: "JetBrains Mono", label: "JetBrains Mono" },
@@ -35,7 +37,7 @@ const colorSchemes = [
   <div class="space-y-7 animate-in fade-in duration-300 pb-8">
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">字体</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{ text("Font", "字体") }}</span>
       </div>
 
       <div
@@ -44,7 +46,9 @@ const colorSchemes = [
         <div
           class="flex items-center justify-between p-3.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
         >
-          <span class="text-[13px] font-medium text-primary">字体族</span>
+          <span class="text-[13px] font-medium text-primary">{{
+            text("Font family", "字体族")
+          }}</span>
           <div class="relative group">
             <select
               v-model="fontFamily"
@@ -68,7 +72,9 @@ const colorSchemes = [
         <div
           class="flex items-center justify-between p-3.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
         >
-          <span class="text-[13px] font-medium text-primary">字体大小</span>
+          <span class="text-[13px] font-medium text-primary">{{
+            text("Font size", "字体大小")
+          }}</span>
           <div
             class="flex items-center gap-1 bg-black/5 dark:bg-white/10 rounded-[6px] px-1 py-0.5"
           >
@@ -92,7 +98,7 @@ const colorSchemes = [
 
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">光标</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{ text("Cursor", "光标") }}</span>
       </div>
 
       <div class="flex gap-4 mb-4">
@@ -109,7 +115,7 @@ const colorSchemes = [
           >
             <div class="w-2.5 h-4 bg-gray-200"></div>
           </div>
-          <span class="text-[11px] text-tertiary">方块</span>
+          <span class="text-[11px] text-tertiary">{{ text("Block", "方块") }}</span>
         </div>
         <div
           class="flex-1 flex flex-col items-center gap-2 p-3 bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl cursor-pointer transition-all shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
@@ -124,7 +130,7 @@ const colorSchemes = [
           >
             <div class="w-2.5 h-0.5 bg-gray-200"></div>
           </div>
-          <span class="text-[11px] text-tertiary">下划线</span>
+          <span class="text-[11px] text-tertiary">{{ text("Underline", "下划线") }}</span>
         </div>
         <div
           class="flex-1 flex flex-col items-center gap-2 p-3 bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl cursor-pointer transition-all shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
@@ -139,21 +145,25 @@ const colorSchemes = [
           >
             <div class="w-0.5 h-4 bg-gray-200"></div>
           </div>
-          <span class="text-[11px] text-tertiary">竖线</span>
+          <span class="text-[11px] text-tertiary">{{ text("Bar", "竖线") }}</span>
         </div>
       </div>
 
       <div
         class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-3.5 px-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
       >
-        <span class="text-[13px] font-medium text-primary">光标闪烁</span>
+        <span class="text-[13px] font-medium text-primary">{{
+          text("Blinking cursor", "光标闪烁")
+        }}</span>
         <Switch v-model:checked="cursorBlink" />
       </div>
     </section>
 
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">配色方案</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Color Scheme", "配色方案")
+        }}</span>
       </div>
 
       <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -182,25 +192,31 @@ const colorSchemes = [
 
     <section>
       <div class="px-2 mb-2">
-        <span class="text-[12px] font-semibold text-tertiary">高级选项</span>
+        <span class="text-[12px] font-semibold text-tertiary">{{
+          text("Advanced Options", "高级选项")
+        }}</span>
       </div>
 
       <div
         class="bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl p-3.5 px-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
       >
         <div class="flex flex-col gap-0.5">
-          <span class="text-[13px] font-medium text-primary">回滚行数</span>
-          <span class="text-[11px] text-tertiary">终端保留的历史行数</span>
+          <span class="text-[13px] font-medium text-primary">{{
+            text("Scrollback lines", "回滚行数")
+          }}</span>
+          <span class="text-[11px] text-tertiary">{{
+            text("Number of terminal history lines to retain", "终端保留的历史行数")
+          }}</span>
         </div>
         <div class="relative group">
           <select
             v-model="scrollback"
             class="appearance-none bg-black/5 dark:bg-white/10 border-0 rounded-[6px] pl-3 pr-8 py-1 text-[12px] outline-none text-primary min-w-[120px] transition-all cursor-pointer"
           >
-            <option :value="500" class="bg-background">500 行</option>
-            <option :value="1000" class="bg-background">1000 行</option>
-            <option :value="5000" class="bg-background">5000 行</option>
-            <option :value="10000" class="bg-background">10000 行</option>
+            <option :value="500" class="bg-background">500 {{ text("lines", "行") }}</option>
+            <option :value="1000" class="bg-background">1000 {{ text("lines", "行") }}</option>
+            <option :value="5000" class="bg-background">5000 {{ text("lines", "行") }}</option>
+            <option :value="10000" class="bg-background">10000 {{ text("lines", "行") }}</option>
           </select>
           <span
             class="icon-[lucide--chevron-down] absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-tertiary pointer-events-none"
